@@ -24,7 +24,7 @@
 *
 * SD card:        https://learn.adafruit.com/adafruit-adalogger-featherwing/using-the-sd-card
 * RTC:            https://learn.adafruit.com/adafruit-adalogger-featherwing/adafruit2-rtc-with-arduino
-* Geophone
+* Geophone (RS1D)
 *
 * Adafruit ESP32 Feather Board (Adafruit HUZZAH32) https://www.adafruit.com/product/3405
 *
