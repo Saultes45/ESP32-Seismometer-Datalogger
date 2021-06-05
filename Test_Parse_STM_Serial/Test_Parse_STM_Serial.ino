@@ -182,7 +182,7 @@ volatile uint8_t RS1D_EOM_flag = 0; //
   #define STATE_LOG            (1u)
   #define STATE_EMPTY          (0u)
 #endif /* STEPS_H */      
-volatile uint8_t currentState = (0u); // Used to store which step we are at, default is state "empty"
+volatile uint8_t currentState = STATE_EMPTY; // Used to store which step we are at, default is state "empty"
 
 //WATCHDOG    
 hw_timer_t * timer = NULL;
@@ -199,7 +199,7 @@ DateTime            timestampForFileName;  // MUST be global!!!!! or it won't up
 
 
 // Relay Pins (for turning external components ON and OFF)
-#define GPS_PWR_PIN_1                      14      // To turn the GPS ON and OFF
+//#define GPS_PWR_PIN_1                      14      // To turn the GPS ON and OFF
 //#define GPS_PWR_PIN_2                      32      // To turn the GPS ON and OFF
 //#define GPS_PWR_PIN_3                      15      // To turn the GPS ON and OFF
 
@@ -269,8 +269,8 @@ void    checkBatteryLevel          (void);        // Print the voltage of the li
 void displayWakeUpReason            (void);       // Display why the module went to sleep
 void changeCPUFrequency             (void);       // Change the CPU frequency and report about it over serial
 void testRTC                        (void);       // Test that the RTC can be accessed
-void turnGPSOFF                     (void);       // Truns GPS OFF
-void turnGPSON                     (void);        // Truns GPS ON
+//void turnGPSOFF                     (void);       // Truns GPS OFF
+//void turnGPSON                     (void);        // Truns GPS ON
 void turnRS1DOFF                     (void);       // Truns RS1D OFF
 void turnRS1DON                     (void);        // Truns RS1D ON
 void testSDCard                     (void);                 // Test that the SD card can be accessed
@@ -367,7 +367,7 @@ digitalWrite(LED_BUILTIN, HIGH);
 void loop() {
 
 turnRS1DON();
-turnGPSON();
+//turnGPSON();
 
 
 delay(100000); // <DEBUG>
@@ -589,32 +589,30 @@ uint8_t DetectBump(void)
 void pinSetUp (void)
 {
 
-/*
-|  UART |  RX IO |  TX IO |  CTS  |   RTS  |
-|:-----:|:------:|:------:|:-----:|:------:|
-| UART0 |  GPIO3 |  GPIO1 |  N/A  |   N/A  |
-| UART1 |  GPIO9 | GPIO10 | GPIO6 | GPIO11 |
-| UART2 | GPIO16 | GPIO17 | GPIO8 |  GPIO7 |
-*/
+  /*
+  |  UART |  RX IO |  TX IO |  CTS  |   RTS  |
+  |:-----:|:------:|:------:|:-----:|:------:|
+  | UART0 |  GPIO3 |  GPIO1 |  N/A  |   N/A  |
+  | UART1 |  GPIO9 | GPIO10 | GPIO6 | GPIO11 |
+  | UART2 | GPIO16 | GPIO17 | GPIO8 |  GPIO7 |
+  */
+    
+    // Declare which pins of the ESP32 will be used
+      pinMode (LED_BUILTIN , OUTPUT);
+      pinMode (BATT_PIN    , INPUT);
   
-  // Declare which pins of the ESP32 will be used
-    pinMode (LED_BUILTIN , OUTPUT);
-    pinMode (BATT_PIN    , INPUT);
-
- // Relay pins (GPS+RS1D)   
-pinMode (GPS_PWR_PIN_1    , OUTPUT);
-//pinMode (GPS_PWR_PIN_2    , OUTPUT);
-//pinMode (GPS_PWR_PIN_3    , OUTPUT);
-
-turnGPSOFF();
-
-pinMode (RS1D_PWR_PIN_1    , OUTPUT);
-pinMode (RS1D_PWR_PIN_2    , OUTPUT);
-//pinMode (RS1D_PWR_PIN_3    , OUTPUT);
-turnRS1DOFF();
-
-
- 
+  // Relay pins (GPS+RS1D)   
+  //pinMode (GPS_PWR_PIN_1    , OUTPUT);
+  //pinMode (GPS_PWR_PIN_2    , OUTPUT);
+  //pinMode (GPS_PWR_PIN_3    , OUTPUT);
+  
+  //turnGPSOFF();
+  
+  pinMode (RS1D_PWR_PIN_1    , OUTPUT);
+  pinMode (RS1D_PWR_PIN_2    , OUTPUT);
+  //pinMode (RS1D_PWR_PIN_3    , OUTPUT);
+  turnRS1DOFF();
+  
 }
 
 //******************************************************************************************
@@ -772,39 +770,39 @@ void testRTC(void) {
 
 }
 
-//******************************************************************************************
-void turnGPSOFF(void) {
-  
-  #ifdef SERIAL_VERBOSE
-    Serial.println("Turning GPS OFF...");
-  #endif
-  
-  digitalWrite(GPS_PWR_PIN_1, LOW);
-  //digitalWrite(GPS_PWR_PIN_2, LOW);
-  //digitalWrite(GPS_PWR_PIN_3, LOW);
-  
-  #ifdef SERIAL_VERBOSE
-    Serial.println("GPS is OFF...");
-  #endif
-
-}
-
-//******************************************************************************************
-void turnGPSON(void) {
-  
-  #ifdef SERIAL_VERBOSE
-    Serial.println("Turning GPS ON...");
-  #endif
-  
-  digitalWrite(GPS_PWR_PIN_1, HIGH);
-  //digitalWrite(GPS_PWR_PIN_2, HIGH);
-  //digitalWrite(GPS_PWR_PIN_3, HIGH);
-  
-  #ifdef SERIAL_VERBOSE
-    Serial.println("GPS is ON...");
-  #endif
-
-}
+////******************************************************************************************
+//void turnGPSOFF(void) {
+//  
+//  #ifdef SERIAL_VERBOSE
+//    Serial.println("Turning GPS OFF...");
+//  #endif
+//  
+//  digitalWrite(GPS_PWR_PIN_1, LOW);
+//  //digitalWrite(GPS_PWR_PIN_2, LOW);
+//  //digitalWrite(GPS_PWR_PIN_3, LOW);
+//  
+//  #ifdef SERIAL_VERBOSE
+//    Serial.println("GPS is OFF...");
+//  #endif
+//
+//}
+//
+////******************************************************************************************
+//void turnGPSON(void) {
+//  
+//  #ifdef SERIAL_VERBOSE
+//    Serial.println("Turning GPS ON...");
+//  #endif
+//  
+//  digitalWrite(GPS_PWR_PIN_1, HIGH);
+//  //digitalWrite(GPS_PWR_PIN_2, HIGH);
+//  //digitalWrite(GPS_PWR_PIN_3, HIGH);
+//  
+//  #ifdef SERIAL_VERBOSE
+//    Serial.println("GPS is ON...");
+//  #endif
+//
+//}
 
 //******************************************************************************************
 void turnRS1DOFF(void) {
