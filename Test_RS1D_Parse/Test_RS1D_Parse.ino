@@ -118,7 +118,7 @@ void loop() {
         Serial.println(seismometerAcc[cnt_Acc]);
 //        delay(10);
 //        Serial.print(",");
-Serial.flush();
+        Serial.flush();
       }
       
       

@@ -74,9 +74,6 @@ char timeStampFormat_FileName[] = "YYYY_MM_DD__hh_mm_ss"; // naming convention f
 #define USE_SD                     // If defined then the ESP32 will log data to SD card (if not it will just read IMU) // <Not coded yet>
 #define PIN_CS_SD       33        // Chip Select (ie CS/SS) for SPI for SD card
 const char SOM_LOG = '$';       // Start of message indicator, mostly used for heath check (no checksum)
-#define FORMAT_TEMP     1         // Numbers significative digits for the TEMPERATURE
-#define FORMAT_ACC      6         // Numbers significative digits for the ACCELEROMETERS
-#define FORMAT_GYR      6         // Numbers significative digits for the GYROSCOPES
 const char FORMAT_SEP = ',';      // Separator between the different files so that the data can be read/parsed by softwares
 #define FORMAT_END      "\r\n"    // End of line for 1 aquisition, to be printed in the SD card // <Not used>
 const uint16_t MAX_LINES_PER_FILES = 40; // Maximum number of lines that we want stored in 1 SD card file. It should be about 1h worth
