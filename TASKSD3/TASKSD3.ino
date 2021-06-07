@@ -9,14 +9,11 @@ uint16_t  cntLinesInFile  = 0; // Written at the end of a file for check (36,000
 uint32_t  cntFile         = 0; // Counter that counts the files written in the SD card this session (we don't include prvious files), included in the name of the file, can handle 0d to 99999d (need 17 bits)
 String    fileName        = "";// Name of the current opened file on the SD card
 
-#define MAX_LINES_PER_FILES 18000 // Maximum number of lines that we want stored in 1 SD card file. It should be about 1h worth
+#define MAX_LINES_PER_FILES 25 // Maximum number of lines that we want stored in 1 SD card file. It should be about 1h worth
 
 // SD card
 #include <SPI.h>
 #include <SD.h>
-
-
-// SD
 File                dataFile;              // Only 1 file can be opened at a certain time, <KEEP GLOBAL>
 
 char timeStampFormat_Line[]     = "YYYY_MM_DD__hh_mm_ss";
@@ -43,7 +40,7 @@ volatile bool isrExecTaskFlag = false;
 // Tells when to execute the task
 void IRAM_ATTR onTimer(){
 
-  // Set the flag that is going to be red in the loop
+  // Set the flag that is going to be read in the loop
   isrExecTaskFlag = true; 
   
 }
@@ -75,25 +72,6 @@ void setup() {
 // initialize serial communication at 115200 bits per second:
   Serial.begin(115200);
 
-
-  // Starting the task timer
-  //------------------------
-  // Use 2nd timer out of 4 (counted from zero)
-  // Set 80 divider for prescaler
-  timerTask = timerBegin(0, 80, true);
-  // Attach onTimer function to this timer
-  timerAttachInterrupt(timerTask, &onTimer, true);
-  // Set alarm to call onTimer function every second (value in microseconds).
-  // Repeat the ISR function (third parameter)
-  timerAlarmWrite(timerTask, US_TO_MS_CONVERSION * WAIT_LOOP_MS, true); // This should give us an accurate 10Hz
-
-
-  // Enable all ISRs
-  //----------------
-
-  timerAlarmEnable(timerTask); // Task#1
-
-
   // Now set up two tasks to run independently
   //--------------------------------------------
 
@@ -116,6 +94,23 @@ void setup() {
     ,  ARDUINO_RUNNING_CORE);
 
   // Now the task scheduler, which takes over control of scheduling individual tasks, is automatically started.
+
+  // Starting the task timer
+  //------------------------
+  // Use 2nd timer out of 4 (counted from zero)
+  // Set 80 divider for prescaler
+  timerTask = timerBegin(0, 80, true);
+  // Attach onTimer function to this timer
+  timerAttachInterrupt(timerTask, &onTimer, true);
+  // Set alarm to call onTimer function every second (value in microseconds).
+  // Repeat the ISR function (third parameter)
+  timerAlarmWrite(timerTask, US_TO_MS_CONVERSION * WAIT_LOOP_MS, true); // This should give us an accurate 10Hz
+
+
+  // Enable all ISRs
+  //----------------
+
+  timerAlarmEnable(timerTask); // Task#1
 
 }
 
@@ -158,7 +153,7 @@ int sensorValue = 0;     // variable to store the value coming from the sensor
       // read the value from the sensor:
       sensorValue = analogRead(sensorPin);
   
-      // Check if we have reached the limit size of the buffer, if we do, we have an everflow (this is REALLY bad)
+      // Check if we have reached the limit size of the buffer, if we do, we have an overflow (this is REALLY bad)
       if (globalSharedBufferCurrentIndex >= STRINGS_ARRAY_SIZE)
       {
         overflowSharedBuffer = true;
@@ -188,68 +183,68 @@ void TaskWriteToSD(void *pvParameters)  // This is a task.
 {
   (void) pvParameters;
 
-/*
- Explanation of what it does
-*/
+  /*
+  Explanation of what it does
+  */
 
- /* Block for 1ms. */
- const TickType_t xDelay = 1 / portTICK_PERIOD_MS;
+  /* Block for 1ms. */
+  const TickType_t xDelay = 1 / portTICK_PERIOD_MS;
 
-pinMode(14, OUTPUT);
+  pinMode(14, OUTPUT);
 
 
   for (;;) // A Task shall never return or exit.
   {
 
-    digitalWrite(14, HIGH);   // indicates the start of Task#1
+    digitalWrite(14, HIGH);   // indicates the start of Task#2
 
     // Check if there are any data in the buffer by reading the counter
     while (globalSharedBufferCurrentIndex > 0)
     {
       // Log data in the SD card
-    //------------------------
+      //------------------------
   
-    // Check if the file is available
-    if (dataFile) 
-    {
-      // We do it like this because of the "\r\n" not desired at the end of a file
-      if (cntLinesInFile >= MAX_LINES_PER_FILES - 1) // Check if we have reached the max. number of lines per file
-      { 
-        // Boost the frequency of the CPU to the MAX so that the writing takes less time
-        //setCpuFrequencyMhz(MAX_CPU_FREQUENCY);
-        // Write to the file w/out the "\r\n"
-        dataFile.print(dataToWrite[globalSharedBufferCurrentIndex]);
-      dataToWrite[globalSharedBufferCurrentIndex] = ""; // Clear the String we just wrote on the SD card
-      globalSharedBufferCurrentIndex --; // make the index point on the previous String in the buffer
-        // Close the file
-        dataFile.close();
-        // Reset the line counter
-        cntLinesInFile = 0;
-        // Create a new file
-        createNewFile();
-        #ifdef SERIAL_DEBUG
-          Serial.println("Reached the max number of lines per file, starting a new one");
-        #endif
-        // Limit back the frequency of the CPU to consume less power
-        //setCpuFrequencyMhz(TARGET_CPU_FREQUENCY);
-    }
-    else // wE ARE STILL UNDER THE LIMIT OF NUMBER OF LINES PER FILE
-    {
-      dataFile.println(dataToWrite[globalSharedBufferCurrentIndex]);
-      dataToWrite[globalSharedBufferCurrentIndex] = ""; // Clear the String we just wrote on the SD card
-      globalSharedBufferCurrentIndex --; // make the index point on the previous String in the buffer
-      cntLinesInFile++; // Increment the lines-in-current-file counter
-  
-//      #ifdef SERIAL_DEBUG
-//        Serial.println("Data have been written");
-//        Serial.print("Current number of lines: ");
-//        Serial.print(cntLinesInFile);
-//        Serial.print("/");
-//        Serial.println(MAX_LINES_PER_FILES);
-//      #endif
-    }
-      
-    }
+      // Check if the file is available
+      if (dataFile) 
+      {
+        // We do it like this because of the "\r\n" not desired at the end of a file
+        if (cntLinesInFile >= MAX_LINES_PER_FILES - 1) // Check if we have reached the max. number of lines per file
+        { 
+          // Boost the frequency of the CPU to the MAX so that the writing takes less time
+          //setCpuFrequencyMhz(MAX_CPU_FREQUENCY);
+          // Write to the file w/out the "\r\n"
+          dataFile.print(dataToWrite[globalSharedBufferCurrentIndex]);
+          dataToWrite[globalSharedBufferCurrentIndex] = ""; // Clear the String we just wrote on the SD card
+          globalSharedBufferCurrentIndex --; // make the index point on the previous String in the buffer
+          // Close the file
+          dataFile.close();
+          // Reset the line counter
+          cntLinesInFile = 0;
+          // Create a new file
+          createNewFile();
+          #ifdef SERIAL_DEBUG
+            Serial.println("Reached the max number of lines per file, starting a new one");
+          #endif
+          // Limit back the frequency of the CPU to consume less power
+          //setCpuFrequencyMhz(TARGET_CPU_FREQUENCY);
+      }
+      else // wE ARE STILL UNDER THE LIMIT OF NUMBER OF LINES PER FILE
+      {
+        dataFile.println(dataToWrite[globalSharedBufferCurrentIndex]);
+        dataToWrite[globalSharedBufferCurrentIndex] = ""; // Clear the String we just wrote on the SD card
+        globalSharedBufferCurrentIndex --; // make the index point on the previous String in the buffer
+        cntLinesInFile++; // Increment the lines-in-current-file counter
+    
+  //      #ifdef SERIAL_DEBUG
+  //        Serial.println("Data have been written");
+  //        Serial.print("Current number of lines: ");
+  //        Serial.print(cntLinesInFile);
+  //        Serial.print("/");
+  //        Serial.println(MAX_LINES_PER_FILES);
+  //      #endif
+      }
+        
+      }
     // If the file isn't open, pop up an error
     else {
 //      #ifdef SERIAL_DEBUG

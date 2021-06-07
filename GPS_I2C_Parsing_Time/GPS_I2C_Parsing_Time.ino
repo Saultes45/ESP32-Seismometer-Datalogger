@@ -28,6 +28,8 @@
 *
 */
 
+#define SERIAL_VERBOSE
+
 #include <Adafruit_GPS.h>
 
 // Connect to the GPS on the hardware I2C port
@@ -43,7 +45,6 @@ uint32_t lastTime = millis(); // Just for display <REMOVE>
 char    timeStampFormat_Line[]      = "YYYY_MM_DD__hh_mm_ss";   // naming convention for EACH LINE OF THE FILE logged to the SD card
 char    timeStampFormat_FileName[]  = "YYYY_MM_DD__hh_mm_ss";   // naming convention for EACH FILE NAME created on the SD card
 String      fileName              = "";           // Name of the current opened file on the SD card
-File        dataFile;                               // Only 1 file can be opened at a certain time, <KEEP GLOBAL>
 #define SOM_LOG         '$' 
 #define FORMAT_SEP      ',' 
 
@@ -64,7 +65,7 @@ void setup()
   // Turn OFF all GPS output
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_OFF);
 
-  GPS.flush();
+//  GPS.flush();
 
   // Set up communication
   // ---------------------
@@ -77,14 +78,27 @@ void setup()
   // Just once, request updates on antenna status, comment out to keep quiet
   GPS.sendCommand(PGCMD_ANTENNA);
   delay(1000);
+  #ifdef SERIAL_VERBOSE
+    while (GPS.available())
+    {
+      Serial.print(GPS.read());
+    }
+  #endif
 
   //  Just once, request firmware version
   GPS.println(PMTK_Q_RELEASE);
   delay(1000);
+    #ifdef SERIAL_VERBOSE
+    while (GPS.available())
+    {
+      Serial.print(GPS.read());
+    }
+  #endif
 
   // Turn on RMC (recommended minimum) and GGA (fix data) including altitude
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
   //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
+
 
 }
 
@@ -93,13 +107,13 @@ void setup()
 void loop() // run over and over again
 {
 
-  //  char c = GPS.read();
-  //  // if you want to debug, this is a good time to do it!
-  //  
-  //  if (c) 
-  //  {
-  //    Serial.print(c);
-  //  }
+    char c = GPS.read();
+    // if you want to debug, this is a good time to do it!
+    
+    if (c) 
+    {
+      Serial.print(c);
+    }
 
   // if a sentence is received, we can check the checksum, parse it...
   if (GPS.newNMEAreceived()) 
@@ -124,7 +138,7 @@ void loop() // run over and over again
     lastTime = millis(); // reset the timer
 
     //Serial.print(" quality: "); Serial.println((int)GPS.fixquality);
-    Serial.print("Fix: "); Serial.print((int)GPS.fix);
+    Serial.print("Fix: "); Serial.println((int)GPS.fix);
 
     #ifdef SERIAL_VERBOSE
     if (GPS.fix) 
@@ -135,10 +149,13 @@ void loop() // run over and over again
     Serial.print("Datetime: ");
 
     Serial.print("20");
+    if (GPS.year < 10) { Serial.print('0'); }
     Serial.print(GPS.year, DEC);
     Serial.print("_");
+    if (GPS.month < 10) { Serial.print('0'); }
     Serial.print(GPS.month, DEC);
     Serial.print("_");
+    if (GPS.day < 10) { Serial.print('0'); }
     Serial.print(GPS.day, DEC);
     Serial.print("__"); 
     
@@ -195,7 +212,7 @@ void loop() // run over and over again
     dataString += String(GPS.minute);
     dataString += "_";
     if (GPS.hour < 10) { dataString += "0"; } 
-    dataString += String(GPS.second);
+    dataString += String(GPS.seconds);
     dataString += ".";
 
     if (GPS.milliseconds < 10) 
@@ -212,7 +229,8 @@ void loop() // run over and over again
     dataString += FORMAT_SEP;
 
     #ifdef SERIAL_VERBOSE
-      Serial.print(dataString);
+      Serial.print("Timestamp: ");
+      Serial.println(dataString);
     #endif
 
   }

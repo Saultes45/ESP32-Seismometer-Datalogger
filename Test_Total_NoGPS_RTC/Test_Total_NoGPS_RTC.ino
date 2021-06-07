@@ -53,7 +53,12 @@
 // -------------------------- Defines and Const --------------------------
 
 
-#define SERIAL_VERBOSE
+//#define SERIAL_VERBOSE
+
+// CPU frequency
+#define MAX_CPU_FREQUENCY             240
+#define TARGET_CPU_FREQUENCY          40
+
 
 // Battery
 #define BATT_VOLTAGE_DIVIDER_FACTOR   2       // [N/A]
@@ -69,9 +74,6 @@
 #define STATE_LOG            (1u)
 #define STATE_EMPTY          (0u)
 #endif /* STATES_H */
-volatile uint8_t currentState   = STATE_EMPTY; // Used to store which step we are at, default is state "empty"
-volatile uint8_t nextState      = STATE_EMPTY; // Used to store which step we are going to do next, default is state "empty"
-
 
 #define NBR_OVERWATCH_BEFORE_ACTION     50
 #define NBR_BUMPS_DETECTED_BEFORE_LOG   100
@@ -157,6 +159,7 @@ void      createNewFile       (void);
 void      testSDCard          (void);
 uint32_t  hex2dec             (char * a);
 void      blinkAnError        (uint8_t errno);
+void      changeCPUFrequency  (void);           // Change the CPU frequency and report about it over serial
 
 
 
@@ -179,7 +182,7 @@ void IRAM_ATTR resetModule()
       ets_printf("Sleeping...\r\n");
     #endif
     
-    const uint_64t watchdog_recurrent_time_in_us = 1800;
+    const uint64_t watchdog_recurrent_time_in_us = 1800;
     
     // Prepare the sleep with all the required parameters
     esp_err_t err = esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH,ESP_PD_OPTION_OFF);
@@ -212,6 +215,7 @@ void setup()
   Serial.println("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"); // Indicates a wakeup to the console
 #endif
 
+  changeCPUFrequency(); // Limit CPU frequency to limit power consumption
 
   // Declare pins
   // -------------
@@ -503,7 +507,7 @@ void checkBatteryLevel (void)
     Serial.print(rawBattValue);
     Serial.println(" LSB");
 
-    Serial.print("Voltage: %f [V]", battVoltage);
+    Serial.printf("Voltage: %f [V]", battVoltage);
 
     if (battVoltage < LOW_BATTERY_THRESHOLD) // check if the battery is low (i.e. below the threshold)
     {
@@ -910,5 +914,25 @@ void createNewFile(void) {
   dataFile = SD.open(fileName, FILE_WRITE);
 
 }
+
+//******************************************************************************************
+void changeCPUFrequency(void) 
+{
+  #ifdef SERIAL_VERBOSE
+  Serial.println("----------------------------------------");
+  Serial.print("Current CPU frequency [MHz]: ");
+  Serial.println(getCpuFrequencyMhz());
+  Serial.println("Changing...");
+  #endif
+  
+  setCpuFrequencyMhz(TARGET_CPU_FREQUENCY);
+  
+  #ifdef SERIAL_VERBOSE
+  Serial.print("Current CPU frequency [MHz]: ");
+  Serial.println(getCpuFrequencyMhz());
+  Serial.println("----------------------------------------");
+  #endif
+}
+
 
 // END OF SCRIPT
