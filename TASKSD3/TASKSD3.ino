@@ -1,4 +1,7 @@
 
+
+#define SERIAL_DEBUG
+
 // RTC
 #include <RTClib.h> // use the one from Adafruit, not the forks with the same name
 
@@ -89,7 +92,7 @@ void setup() {
     ,  "TaskWriteToSD"
     ,  1024*10  // Stack size
     ,  NULL
-    ,  2  // Priority
+    ,  1  // Priority
     ,  NULL 
     ,  ARDUINO_RUNNING_CORE);
 
@@ -133,8 +136,8 @@ void TaskRetrieveData(void *pvParameters)  // This is a task.
  Explanation of what it does
 */
 
- /* Block for 1ms. */
- const TickType_t xDelay = 1 / portTICK_PERIOD_MS;
+ /* Block for 10ms. */
+ const TickType_t xDelay = 10 / portTICK_PERIOD_MS;
 
 pinMode(32, OUTPUT);
 
@@ -152,6 +155,10 @@ int sensorValue = 0;     // variable to store the value coming from the sensor
     {
       // read the value from the sensor:
       sensorValue = analogRead(sensorPin);
+
+      // #ifdef SERIAL_DEBUG
+      //   Serial.println("Caught interrupt");
+      // #endif
   
       // Check if we have reached the limit size of the buffer, if we do, we have an overflow (this is REALLY bad)
       if (globalSharedBufferCurrentIndex >= STRINGS_ARRAY_SIZE)
@@ -167,13 +174,24 @@ int sensorValue = 0;     // variable to store the value coming from the sensor
         dataToWrite[globalSharedBufferCurrentIndex] = String(sensorValue);
     
         globalSharedBufferCurrentIndex ++; // Increment the counter (currently points on nothing)
+
+        #ifdef SERIAL_DEBUG
+          Serial.println("Data put in the buffer");
+        #endif
+
+        vTaskDelay( 80 / portTICK_PERIOD_MS ); 
+
       } 
+    }
+    else
+    {
+      vTaskDelay( 1 / portTICK_PERIOD_MS ); // xDelay is the amount of time, in tick periods, that the calling task should block itself, freeing CPU cycles for the other competing tasks
     }
     
 
     digitalWrite(32, LOW);   // indicates the end of Task#1
     
-    vTaskDelay( xDelay ); // xDelay is the amount of time, in tick periods, that the calling task should block itself, freeing CPU cycles for the other competing tasks
+    
   }
 }
 
@@ -187,8 +205,8 @@ void TaskWriteToSD(void *pvParameters)  // This is a task.
   Explanation of what it does
   */
 
-  /* Block for 1ms. */
-  const TickType_t xDelay = 1 / portTICK_PERIOD_MS;
+  /* Block for 100ms. */
+  const TickType_t xDelay = 100 / portTICK_PERIOD_MS;
 
   pinMode(14, OUTPUT);
 
@@ -199,6 +217,11 @@ void TaskWriteToSD(void *pvParameters)  // This is a task.
     digitalWrite(14, HIGH);   // indicates the start of Task#2
 
     // Check if there are any data in the buffer by reading the counter
+    
+    #ifdef SERIAL_DEBUG
+      Serial.printf("There are %d Strings in the buffer\r\n", globalSharedBufferCurrentIndex);
+    #endif
+    
     while (globalSharedBufferCurrentIndex > 0)
     {
       // Log data in the SD card
