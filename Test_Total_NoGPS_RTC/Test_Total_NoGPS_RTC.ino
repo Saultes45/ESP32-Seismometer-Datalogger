@@ -53,7 +53,7 @@
 // -------------------------- Defines and Const --------------------------
 
 
-#define SERIAL_VERBOSE
+#define SERIAL_VERBOSE // Comment out to remove message to the console (and save some exec time and power)
 
 // CPU frequency
 #define MAX_CPU_FREQUENCY             240
@@ -78,8 +78,9 @@
 #define NBR_OVERWATCH_BEFORE_ACTION     50
 #define NBR_BUMPS_DETECTED_BEFORE_LOG   100
 #define NBR_LOG_BEFORE_ACTION           75
-#define TIME_TO_SLEEP               10        // In [s], time spent in the deep sleep state
-#define uS_TO_S_FACTOR              1000000ULL  // Conversion factor from us to s for the deepsleep // Source: https://github.com/espressif/arduino-esp32/issues/3286
+#define TIME_TO_SLEEP               10          // In [s], time spent in the deep sleep state
+#define S_TO_US_FACTOR              1000000ULL  // Conversion factor from [s] to [us] for the deepsleep // Source: https://github.com/espressif/arduino-esp32/issues/3286
+#define S_TO_MS_FACTOR              1000        // Conversion factor from [s] to [ms] for the delay
 
 // Bump detection
 const int32_t BUMP_THRESHOLD_POS = +100000;
@@ -87,18 +88,21 @@ const int32_t BUMP_THRESHOLD_NEG = -100000;
 
 
 // RS1D
+
+const uint8_t  NBR_ACCELERATIONS_PER_MESSAGE   = 50; // scope controlled  + cannot be reassigned
 #define       RX_BUFFER_SIZE        650     //640 actually needed, margin of 10 observed
-const unsigned long RS1D_DEPILE_TIMEOUT   = 100;  // in [ms]
-const uint16_t    rs1dWarmUpTime      = 5000; // in [ms]
-#define       GEOPHONE_BAUD_RATE    230400    // Baudrate in [bauds] for serial communication with the Geophone 
-#define       GEOPHONE_TIMEOUT    100     // For the character search in buffer
-#define       GeophoneSerial        Serial1   // Use the 2nd (out of 3) hardware serial
+const unsigned long RS1D_DEPILE_TIMEOUT_MS   = 100;  // in [ms]
+const uint16_t    RS1D_WARMUP_TIME_MS      = 5000; // in [ms]
+#define       GEOPHONE_BAUD_RATE    230400    // Baudrate in [bauds] for serial communication with the Geophone
+#define       GEOPHONE_TIMEOUT_MS    100     // For the character search in buffer, in [ms]
+#define       GeophoneSerial        Serial1   // Use the 2nd (out of 3) hardware serial of the ESP32
 const uint8_t RS1D_PWR_PIN_1              = 14;      // To turn the geophone ON and OFF
 
 
 // WATCHDOG
 hw_timer_t * timer = NULL;
 const uint8_t wdtTimeout = 3; // Watchdog timeout in [s]
+const uint8_t  MAX_NBR_WDT = 10;
 
 // LOG+SD
 #define PIN_CS_SD                   33     // Chip Select (ie CS/SS) for SPI for SD card
@@ -115,7 +119,7 @@ const uint8_t     LOG_PWR_PIN_2        = 26;    // To turn the geophone ON and O
 // RS1D
 char    RS1Dmessage[RX_BUFFER_SIZE];      // Have you seen the sheer size of that!!! Time...to die.
 bool  goodMessageReceived_flag    = false;  // Set to "bad message" first
-int32_t seismometerAcc[50];
+int32_t seismometerAcc[NBR_ACCELERATIONS_PER_MESSAGE];
 uint8_t nbr_bumpDetectedLast    = 0;        // Max of 50; // This should be the output of a function and should be local
 
 
@@ -156,6 +160,9 @@ void      turnRS1DON          (void);
 void      turnLogOFF          (void);
 void      turnLogON           (void);
 
+void      turnGPSOFF          (void);
+void      turnGPSON           (void);
+
 void      waitForRS1DWarmUp   (void);
 void      testRTC             (void);
 void      logToSDCard         (void);
@@ -171,42 +178,43 @@ void      changeCPUFrequency  (void);           // Change the CPU frequency and 
 
 // -------------------------- ISR ----------------
 // Watchdog
-void IRAM_ATTR resetModule() 
+void IRAM_ATTR resetModule()
 {
   nbr_WatchdogTrigger ++; // For statistics
   lastWatchdogTrigger = rtc.now();
-  
+
   #ifdef SERIAL_VERBOSE
     ets_printf("Problem! Watchdog trigger: reboot or sleep?\r\n");
+    ets_printf("Number of WDT trigger: %d / %d\r\n", nbr_WatchdogTrigger, MAX_NBR_WDT);
   #endif
-  
-  if (nbr_WatchdogTrigger > 10)
+
+  if (nbr_WatchdogTrigger > MAX_NBR_WDT)
   {
     // Sleep instead of reboot
-    
+
     #ifdef SERIAL_VERBOSE
       ets_printf("Sleeping...\r\n");
     #endif
-    
+
     const uint64_t watchdog_recurrent_time_in_us = 1800;
-    
+
     // Prepare the sleep with all the required parameters
     esp_err_t err = esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH,ESP_PD_OPTION_OFF);
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM,ESP_PD_OPTION_OFF);
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM,ESP_PD_OPTION_OFF);
     // Serial.println("Error = " + String(err)); // Tell the console the error status
-    esp_sleep_enable_timer_wakeup(watchdog_recurrent_time_in_us * uS_TO_S_FACTOR); // Set up deep sleep wakeup timer
-    
-    
+    esp_sleep_enable_timer_wakeup(watchdog_recurrent_time_in_us * S_TO_US_FACTOR); // Set up deep sleep wakeup timer
+
+
     // Start the deep sleep
     esp_deep_sleep_start();
   }
-  else 
+  else
   {
     #ifdef SERIAL_VERBOSE
       ets_printf("Rebooting...\r\n");
     #endif
-    
+
     esp_restart();
   }
 }
@@ -237,7 +245,7 @@ void setup()
 
   // Set up RTC + SD
   // ----------------
-  
+
   turnLogON(); // Start the feather datalogger
   testRTC();
   testSDCard();
@@ -253,20 +261,20 @@ void setup()
   // Start the HW serial for the Geophone/STM
   // ----------------------------------------
   GeophoneSerial.begin(GEOPHONE_BAUD_RATE);
-  GeophoneSerial.setTimeout(GEOPHONE_TIMEOUT);// Set the timeout to 100 milliseconds (for findUntil)
+  GeophoneSerial.setTimeout(GEOPHONE_TIMEOUT_MS); // Set the timeout in [ms] (for findUntil)
 
   waitForRS1DWarmUp();
 
 #ifdef SERIAL_VERBOSE
   Serial.println("The next transmission might be the last transmission to the PC, if you turned verbose OFF");
-#endif  
+#endif
 
   // Preaparing the night watch (watchdog)
   //-------------------------------------
   // Remember to hold the door
   timer = timerBegin(0, 80, true);                  //timer 0, div 80
   timerAttachInterrupt(timer, &resetModule, true);  //attach callback
-  timerAlarmWrite(timer, wdtTimeout * uS_TO_S_FACTOR, false); // set time is in [us]
+  timerAlarmWrite(timer, wdtTimeout * S_TO_US_FACTOR, false); // set time is in [us]
   // Enable all the ISR later
 
 #ifdef SERIAL_VERBOSE
@@ -294,31 +302,30 @@ void loop() {
     {
     case STATE_OVERWATCH: // Choose between: Continue, Sleep, Log
       {
-        
         // Statistics
         //-----------
         cnt_Overwatch++;
-        
+
         nbr_bumpDetectedTotal = nbr_bumpDetectedTotal + nbr_bumpDetectedLast;
-        
+
         // Sequencing logic
         //-----------------
-        
+
         if (nbr_bumpDetectedLast > 0)
         {
           nbr_messagesWithBumps++;
         }
-        
+
         if (cnt_Overwatch >= NBR_OVERWATCH_BEFORE_ACTION)
         {
           #ifdef SERIAL_VERBOSE
           Serial.println("End of the watch");
           Serial.printf("We have reached the desired number of overwatch cycles: %d over %d \r\n", cnt_Overwatch, NBR_OVERWATCH_BEFORE_ACTION);
           Serial.println("Time to make a descision: LOG or SLEEP?");
-          
+
           Serial.printf("We have detected %d bumps (or %d messages) over %d desired\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_BUMPS_DETECTED_BEFORE_LOG);
           #endif
-          
+
           if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
           {
             #ifdef SERIAL_VERBOSE
@@ -326,8 +333,11 @@ void loop() {
             #endif
             nextState = STATE_LOG;
 
-            // Start the feather datalogger ON
+            // Start the feather datalogger
             turnLogON();
+			delay(50); // wait for the feather to be ready
+			// Start the GPS
+            turnGPSON();
 
             // Create a new file
             createNewFile();
@@ -337,11 +347,11 @@ void loop() {
             #ifdef SERIAL_VERBOSE
             Serial.println("We did NOT reach our number of bumps goal, let's SLEEP");
             #endif
-            
+
             // Switch the RS1D off immediately to save power
             // Note: it will switched off anyway late when, the esp is put to deep sleep
             turnRS1DOFF();
-            
+
             nextState = STATE_SLEEP;
           }
         }
@@ -352,18 +362,17 @@ void loop() {
           #endif
           nextState = STATE_OVERWATCH;
         }
-        
-        
+
+
         break;
       }/* [] END OF case STATE_OVERWATCH: */
-      
+
     case STATE_LOG:
       {
-
         // Statistics
         //-----------
         nbr_bumpDetectedTotal = nbr_bumpDetectedTotal + nbr_bumpDetectedLast;
-        
+
         if (nbr_bumpDetectedLast > 0)
         {
           nbr_messagesWithBumps++;
@@ -385,12 +394,15 @@ void loop() {
           Serial.printf("We have detected %d bumps (or %d messages) during this log cycle of %d messages\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_LOG_BEFORE_ACTION);
           #endif
           nextState = STATE_OVERWATCH;
-          turnLogOFF(); // Stop the feather datalogger
 
           // Close the file (even if the number of lines per file has not been reached)
           dataFile.close();
           // Reset the line counter
           cntLinesInFile = 0;
+		  
+          turnLogOFF(); // Stop the feather datalogger
+          turnGPSOFF(); // Stop the GPS
+          // Leave the RS1D ON since we are going to overwatch
 
           #ifdef SERIAL_VERBOSE
           Serial.println("Let's check the battery level, since we are at the end of the LOG");
@@ -408,7 +420,7 @@ void loop() {
 
         break;
       }/* [] END OF case STATE_LOG: */
-            
+
     default:
       {
         #ifdef SERIAL_VERBOSE
@@ -417,7 +429,7 @@ void loop() {
         #endif
 
         //Trigger the watchdog to force a reboot
-        delay(wdtTimeout * 1000);
+        delay(wdtTimeout * S_TO_MS_FACTOR);
 
         break;
       }/* [] END OF "unknown" and "other" case */
@@ -431,23 +443,23 @@ void loop() {
 
       // Deep sleep
       // -----------
-      
+
       // Prepare the sleep with all the required parameters
       esp_err_t err = esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH,ESP_PD_OPTION_OFF);
       esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM,ESP_PD_OPTION_OFF);
       esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM,ESP_PD_OPTION_OFF);
       // Serial.println("Error = " + String(err)); // Tell the console the error status
-      esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR); // Set up deep sleep wakeup timer
-      
+      esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * S_TO_US_FACTOR); // Set up deep sleep wakeup timer
+
       #ifdef SERIAL_VERBOSE
       Serial.println("Going to sleep...");
       Serial.flush(); // Wait until serial buffer is clear <Please check because might be a waste of time: maybe sleep also clears the buffer?>
       #endif
-      
-      
+
+
       // Start the deep sleep
       esp_deep_sleep_start();
-      
+
       #ifdef SERIAL_VERBOSE
       Serial.println("If you see this, there is a problem with the deep sleep");
       #endif
@@ -463,15 +475,15 @@ void loop() {
         Serial.println("Looks like we need to change the state");
         Serial.println("Resetting some variables...");
         #endif
-        
+
         nbr_bumpDetectedTotal   = 0;
         nbr_bumpDetectedLast    = 0;
         nbr_messagesWithBumps   = 0;
         cnt_Overwatch           = 0;
         cnt_Log                 = 0;
-        
+
         currentState = nextState; // For next loop
-        
+
       }
       //      else
       //      {
@@ -495,20 +507,31 @@ void pinSetUp (void)
 {
 
   // Declare which pins of the ESP32 will be used
-  
+
+  // LED pins
+  //--------------
   pinMode (LED_BUILTIN , OUTPUT);
+
+  // Analog pins
+  //--------------
   pinMode (BATT_PIN    , INPUT);
 
   // Power pins
   //--------------
   pinMode (RS1D_PWR_PIN_1    , OUTPUT);
-  pinMode (RS1D_PWR_PIN_2    , OUTPUT);
 
   pinMode (LOG_PWR_PIN_1    , OUTPUT);
-  
+  pinMode (LOG_PWR_PIN_2    , OUTPUT);
+
+  pinMode (GPS_BOOST_ENA_PIN    , OUTPUT);
+
+  // Initial pin state
+  //-------------------
+  digitalWrite(LED_BUILTIN, LOW);
 
   turnRS1DOFF();
   turnLogOFF();
+  turnGPSOFF();
 
 }
 
@@ -551,7 +574,6 @@ void turnRS1DOFF(void) {
 #endif
 
   digitalWrite(RS1D_PWR_PIN_1, LOW);
-  digitalWrite(RS1D_PWR_PIN_2, LOW);
 
 #ifdef SERIAL_VERBOSE
   Serial.println("RS1D is OFF");
@@ -567,7 +589,6 @@ void turnRS1DON(void) {
 #endif
 
   digitalWrite(RS1D_PWR_PIN_1, HIGH);
-  digitalWrite(RS1D_PWR_PIN_2, HIGH);
 
 #ifdef SERIAL_VERBOSE
   Serial.println("RS1D is ON");
@@ -583,6 +604,7 @@ void turnLogOFF(void) {
 #endif
 
   digitalWrite(LOG_PWR_PIN_1, LOW);
+  digitalWrite(LOG_PWR_PIN_2, LOW);
 
 #ifdef SERIAL_VERBOSE
   Serial.println("Log is OFF");
@@ -598,10 +620,42 @@ void turnLogON(void) {
 #endif
 
   digitalWrite(LOG_PWR_PIN_1, HIGH);
+  digitalWrite(LOG_PWR_PIN_2, HIGH);
 
 
 #ifdef SERIAL_VERBOSE
   Serial.println("Log is ON");
+#endif
+
+}
+
+//******************************************************************************************
+void turnGPSOFF(void) {
+
+#ifdef SERIAL_VERBOSE
+  Serial.println("Turning GPS OFF...");
+#endif
+
+  digitalWrite(GPS_BOOST_ENA_PIN, LOW);
+
+#ifdef SERIAL_VERBOSE
+  Serial.println("GPS is OFF");
+#endif
+
+}
+
+//******************************************************************************************
+void turnGPSON(void) {
+
+#ifdef SERIAL_VERBOSE
+  Serial.println("Turning GPS ON...");
+#endif
+
+  digitalWrite(GPS_BOOST_ENA_PIN, HIGH);
+
+
+#ifdef SERIAL_VERBOSE
+  Serial.println("GPS is ON");
 #endif
 
 }
@@ -613,7 +667,7 @@ void waitForRS1DWarmUp(void) {
   Serial.println("RS1D Warmup...");
 #endif
 
-  delay(rs1dWarmUpTime); // Just wait for the sensor to be ready
+  delay(RS1D_WARMUP_TIME_MS); // Just wait for the sensor to be ready
 }
 
 //******************************************************************************************
@@ -635,11 +689,12 @@ void logToSDCard(void) {
   char timeStamp[sizeof(timeStampFormat_Line)];
   strncpy(timeStamp, timeStampFormat_Line, sizeof(timeStampFormat_Line));
   dataString += time_loop.toString(timeStamp);
+  dataString += ".000"; // add the [ms] placeholder 
   dataString += FORMAT_SEP;
 
   // Write the accelerations in the message
   //------------------------------------------
-  for (uint8_t cnt_Acc = 0; cnt_Acc < 50; cnt_Acc++)
+  for (uint8_t cnt_Acc = 0; cnt_Acc < NBR_ACCELERATIONS_PER_MESSAGE; cnt_Acc++)
   {
     // Save the results (acceleration is measured in ???)
     dataString += String(seismometerAcc[cnt_Acc]);
@@ -714,7 +769,7 @@ void readRS1DBuffer(void)
   {
     if(GeophoneSerial.find("[\""))// test the received buffer for SOM_CHAR_SR
     {
-      
+
       cnt_savedMessage = 0;
       RS1Dmessage[cnt_savedMessage] = '[';
       cnt_savedMessage ++;
@@ -723,7 +778,7 @@ void readRS1DBuffer(void)
 
       unsigned long startedWaiting = millis();
 
-      while((RS1Dmessage[cnt_savedMessage-1] != ']') && (millis() - startedWaiting <= RS1D_DEPILE_TIMEOUT) && (cnt_savedMessage < RX_BUFFER_SIZE))
+      while((RS1Dmessage[cnt_savedMessage-1] != ']') && (millis() - startedWaiting <= RS1D_DEPILE_TIMEOUT_MS) && (cnt_savedMessage < RX_BUFFER_SIZE))
       {
         if (GeophoneSerial.available())
         {
@@ -748,8 +803,7 @@ void parseGeophoneData(void)
   if (strstr(RS1Dmessage, "\"]"))
   {
     const uint8_t  max_nbr_extractedCharPerAcc  = 9; // scope controlled  + cannot be reassigned
-    const uint8_t  nbr_accelerationPerMessage   = 50; // scope controlled  + cannot be reassigned
-    
+
     char    temp1[max_nbr_extractedCharPerAcc];
     uint8_t cnt_accvalues = 0;
     char    *p = RS1Dmessage;
@@ -757,7 +811,7 @@ void parseGeophoneData(void)
 
     nbr_bumpDetectedLast = 0; //RESET
 
-    for (uint8_t cnt_fill=0; cnt_fill < nbr_accelerationPerMessage; cnt_fill++)
+    for (uint8_t cnt_fill=0; cnt_fill < NBR_ACCELERATIONS_PER_MESSAGE; cnt_fill++)
     {
       seismometerAcc[cnt_fill] = (int32_t)0;
     }
@@ -766,7 +820,7 @@ void parseGeophoneData(void)
     //----------------------------------------------------------------------
     p = strchr(p, '[')+1;
     p++; // Avoid the "
-    
+
     memset(temp1,'\0', max_nbr_extractedCharPerAcc);
     while((*p != '"') && (cnt < max_nbr_extractedCharPerAcc)) // No error checking... Try not. Do, or do not. There is no try
     {
@@ -782,7 +836,7 @@ void parseGeophoneData(void)
 
     // Parse the rest of the accelerations
     //-------------------------------------
-    for (cnt_accvalues = 1; cnt_accvalues < nbr_accelerationPerMessage; cnt_accvalues++)
+    for (cnt_accvalues = 1; cnt_accvalues < NBR_ACCELERATIONS_PER_MESSAGE; cnt_accvalues++)
     {
       p = strchr(p, ',')+1;
       p++; //Avoid the "
@@ -900,7 +954,7 @@ void blinkAnError(uint8_t errno) {  // Use an on-board LED (the red one close to
 }
 
 //******************************************************************************************
-void testSDCard(void) 
+void testSDCard(void)
 {
 #ifdef SERIAL_VERBOSE
   Serial.print("Initializing SD card...");
@@ -966,7 +1020,7 @@ void createNewFile(void) {
 }
 
 //******************************************************************************************
-void changeCPUFrequency(void) 
+void changeCPUFrequency(void)
 {
   #ifdef SERIAL_VERBOSE
   Serial.println("----------------------------------------");
@@ -974,9 +1028,9 @@ void changeCPUFrequency(void)
   Serial.println(getCpuFrequencyMhz());
   Serial.println("Changing...");
   #endif
-  
+
   setCpuFrequencyMhz(TARGET_CPU_FREQUENCY);
-  
+
   #ifdef SERIAL_VERBOSE
   Serial.print("Current CPU frequency [MHz]: ");
   Serial.println(getCpuFrequencyMhz());
