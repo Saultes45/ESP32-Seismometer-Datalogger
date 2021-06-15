@@ -107,6 +107,7 @@ void setup() {
   pinMode (LOG_PWR_PIN_1    , OUTPUT);
   pinMode (LOG_PWR_PIN_2    , OUTPUT);
 
+  pinMode (GPS_BOOST_ENA_PIN    , OUTPUT); // GPS is actually not used in that case
 
   for (uint8_t cnt_fill=0; cnt_fill < 50; cnt_fill++)
   {
@@ -124,8 +125,10 @@ void setup() {
 
   digitalWrite(RS1D_PWR_PIN_1, HIGH);
 
+  digitalWrite(GPS_BOOST_ENA_PIN, HIGH); // Turn ON the GPS 5V boost converter
+
   
-  delay(50);
+  delay(50); // Startup time for the RTC/SD
   testRTC();
   testSDCard();  
 
@@ -147,8 +150,8 @@ void loop()
     readRS1DBuffer();
     if (goodMessageReceived_flag)
     {
-      goodMessageReceived_flag = false; // Reset the flag
-      nbr_bumpDetectedLast = (uint8_t)0; //Reset
+      goodMessageReceived_flag = false;  // Reset the flag
+      nbr_bumpDetectedLast = (uint8_t)0; // Reset
 
 
     // Create a string for assembling the data to log

@@ -93,8 +93,7 @@ const uint16_t    rs1dWarmUpTime      = 5000; // in [ms]
 #define       GEOPHONE_BAUD_RATE    230400    // Baudrate in [bauds] for serial communication with the Geophone 
 #define       GEOPHONE_TIMEOUT    100     // For the character search in buffer
 #define       GeophoneSerial        Serial1   // Use the 2nd (out of 3) hardware serial
-const uint8_t     RS1D_PWR_PIN_1        = 25u;    // To turn the geophone ON and OFF
-const uint8_t     RS1D_PWR_PIN_2        = 26u;    // To turn the geophone ON and OFF
+const uint8_t RS1D_PWR_PIN_1              = 14;      // To turn the geophone ON and OFF
 
 
 // WATCHDOG
@@ -107,7 +106,8 @@ const char SOM_LOG                = '$'; // Start of message indicator, mostly u
 const char FORMAT_SEP               = ','; // Separator between the different files so that the data can be read/parsed by softwares
 const uint16_t MAX_LINES_PER_FILES    = NBR_LOG_BEFORE_ACTION;  // Maximum number of lines that we want stored in 1 SD card file. It should be about ...min worth
 const char SESSION_SEPARATOR_STRING[]   =  "----------------------------------";
-const uint8_t     LOG_PWR_PIN_1        = 21u;    // To turn the geophone ON and OFF
+const uint8_t     LOG_PWR_PIN_1        = 25;    // To turn the geophone ON and OFF
+const uint8_t     LOG_PWR_PIN_2        = 26;    // To turn the geophone ON and OFF
 
 // -------------------------- Global Variables --------------------------
 
@@ -141,6 +141,7 @@ DateTime lastWatchdogTrigger;     // <NOT YET USED>
 volatile uint32_t nbr_WatchdogTrigger = 0;     // <NOT YET USED>
 
 //RTC
+const uint8_t GPS_BOOST_ENA_PIN           = 21;      // To turn the BOOST converter of the GPS ON and OFF
 RTC_PCF8523         rtc;
 DateTime            time_loop;             // MUST be global!!!!! or it won't update
 DateTime            timestampForFileName;  // MUST be global!!!!! or it won't update
