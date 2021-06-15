@@ -53,7 +53,7 @@
 // -------------------------- Defines and Const --------------------------
 
 
-//#define SERIAL_VERBOSE
+#define SERIAL_VERBOSE
 
 // CPU frequency
 #define MAX_CPU_FREQUENCY             240
@@ -107,7 +107,7 @@ const char SOM_LOG                = '$'; // Start of message indicator, mostly u
 const char FORMAT_SEP               = ','; // Separator between the different files so that the data can be read/parsed by softwares
 const uint16_t MAX_LINES_PER_FILES    = NBR_LOG_BEFORE_ACTION;  // Maximum number of lines that we want stored in 1 SD card file. It should be about ...min worth
 const char SESSION_SEPARATOR_STRING[]   =  "----------------------------------";
-
+const uint8_t     LOG_PWR_PIN_1        = 21u;    // To turn the geophone ON and OFF
 
 // -------------------------- Global Variables --------------------------
 
@@ -148,8 +148,13 @@ DateTime            timestampForFileName;  // MUST be global!!!!! or it won't up
 // -------------------------- Functions declaration --------------------------
 void      pinSetUp            (void);
 void      checkBatteryLevel   (void);
+
 void      turnRS1DOFF         (void);
 void      turnRS1DON          (void);
+
+void      turnLogOFF          (void);
+void      turnLogON           (void);
+
 void      waitForRS1DWarmUp   (void);
 void      testRTC             (void);
 void      logToSDCard         (void);
@@ -231,10 +236,13 @@ void setup()
 
   // Set up RTC + SD
   // ----------------
+  
+  turnLogON(); // Start the feather datalogger
   testRTC();
   testSDCard();
 
   currentState = STATE_OVERWATCH;
+  turnLogON(); // Turn the feather datalogger OFF, we will go to OVW and we don't need it
 
 
   // Start the RS1D
@@ -317,6 +325,9 @@ void loop() {
             #endif
             nextState = STATE_LOG;
 
+            // Start the feather datalogger ON
+            turnLogON();
+
             // Create a new file
             createNewFile();
           }
@@ -373,6 +384,7 @@ void loop() {
           Serial.printf("We have detected %d bumps (or %d messages) during this log cycle of %d messages\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_LOG_BEFORE_ACTION);
           #endif
           nextState = STATE_OVERWATCH;
+          turnLogOFF(); // Stop the feather datalogger
 
           // Close the file (even if the number of lines per file has not been reached)
           dataFile.close();
@@ -482,13 +494,20 @@ void pinSetUp (void)
 {
 
   // Declare which pins of the ESP32 will be used
+  
   pinMode (LED_BUILTIN , OUTPUT);
   pinMode (BATT_PIN    , INPUT);
 
+  // Power pins
+  //--------------
   pinMode (RS1D_PWR_PIN_1    , OUTPUT);
   pinMode (RS1D_PWR_PIN_2    , OUTPUT);
 
+  pinMode (LOG_PWR_PIN_1    , OUTPUT);
+  
+
   turnRS1DOFF();
+  turnLogOFF();
 
 }
 
@@ -548,10 +567,40 @@ void turnRS1DON(void) {
 
   digitalWrite(RS1D_PWR_PIN_1, HIGH);
   digitalWrite(RS1D_PWR_PIN_2, HIGH);
-  //digitalWrite(RS1D_PWR_PIN_3, HIGH);
 
 #ifdef SERIAL_VERBOSE
   Serial.println("RS1D is ON");
+#endif
+
+}
+
+//******************************************************************************************
+void turnLogOFF(void) {
+
+#ifdef SERIAL_VERBOSE
+  Serial.println("Turning Log OFF...");
+#endif
+
+  digitalWrite(LOG_PWR_PIN_1, LOW);
+
+#ifdef SERIAL_VERBOSE
+  Serial.println("Log is OFF");
+#endif
+
+}
+
+//******************************************************************************************
+void turnLogON(void) {
+
+#ifdef SERIAL_VERBOSE
+  Serial.println("Turning Log ON...");
+#endif
+
+  digitalWrite(LOG_PWR_PIN_1, HIGH);
+
+
+#ifdef SERIAL_VERBOSE
+  Serial.println("Log is ON");
 #endif
 
 }

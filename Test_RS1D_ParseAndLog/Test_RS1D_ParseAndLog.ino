@@ -27,10 +27,7 @@
 *
 */
 
-// ADD GPS PWR + Feather logger PWR
-#define SD_PWR_PIN_1                      04u      // To turn the Feather logger ON and OFF
-#define SD_PWR_PIN_2                      36u      // To turn the Feather logger ON and OFF
-
+#define SERIAL_DEBUG
 
 //RPI Rx buffer
 #define RX_BUFFER_SIZE                  (650u)  //640 actually needed, margin of 10 observed
@@ -42,8 +39,14 @@ char    RS1Dmessage[RX_BUFFER_SIZE]; ////Have you seen the sheer size of that!!!
 // Use the 2nd (out of 3) hardware serial
 #define GeophoneSerial Serial1
 
-#define RS1D_PWR_PIN_1                      25u      // To turn the geophone ON and OFF
-#define RS1D_PWR_PIN_2                      26u      // To turn the geophone ON and OFF
+const uint8_t     LOG_PWR_PIN_1        = 25;    // To turn the geophone ON and OFF
+const uint8_t     LOG_PWR_PIN_2        = 26;    // To turn the geophone ON and OFF
+
+
+const uint8_t RS1D_PWR_PIN_1              = 14;      // To turn the geophone ON and OFF
+
+const uint8_t GPS_BOOST_ENA_PIN           = 21;      // To turn the BOOST converter of the GPS ON and OFF
+
 
 // Bump detection
 const int32_t BUMP_THRESHOLD_POS = +100000;           
@@ -100,7 +103,10 @@ void setup() {
   // Declare pins
   // ----------------------------------------
   pinMode (RS1D_PWR_PIN_1    , OUTPUT);
-  pinMode (RS1D_PWR_PIN_2    , OUTPUT);
+
+  pinMode (LOG_PWR_PIN_1    , OUTPUT);
+  pinMode (LOG_PWR_PIN_2    , OUTPUT);
+
 
   for (uint8_t cnt_fill=0; cnt_fill < 50; cnt_fill++)
   {
@@ -112,6 +118,14 @@ void setup() {
   // Do some preliminary tests
   // -------------------------
    Serial.println("***********************************************************************"); //Indicates via the console that a new cycle started 
+  
+  digitalWrite(LOG_PWR_PIN_1, HIGH);
+  digitalWrite(LOG_PWR_PIN_2, HIGH);
+
+  digitalWrite(RS1D_PWR_PIN_1, HIGH);
+
+  
+  delay(50);
   testRTC();
   testSDCard();  
 
@@ -120,9 +134,6 @@ void setup() {
   // ----------------------------------------
   GeophoneSerial.begin(GEOPHONE_BAUD_RATE);
   GeophoneSerial.setTimeout(100);// Set the timeout to 100 milliseconds (for findUntil)
-
-  digitalWrite(RS1D_PWR_PIN_1, HIGH);
-  digitalWrite(RS1D_PWR_PIN_2, HIGH);
 
   // Create the first file
   //----------------------
@@ -452,6 +463,7 @@ void testRTC(void) {
   if (!rtc.begin()) {
 //    Serial.println("Couldn't find RTC, is it properly connected?");
     Serial.flush(); // Wait until there all the text for the console have been sent
+    delay(5000);
     abort();
   }
 
