@@ -27,6 +27,11 @@
 *
 */
 
+// ADD GPS PWR + Feather logger PWR
+#define SD_PWR_PIN_1                      04u      // To turn the Feather logger ON and OFF
+#define SD_PWR_PIN_2                      36u      // To turn the Feather logger ON and OFF
+
+
 //RPI Rx buffer
 #define RX_BUFFER_SIZE                  (650u)  //640 actually needed, margin of 10 observed
 char    RS1Dmessage[RX_BUFFER_SIZE]; ////Have you seen the sheer size of that!!! Time...to die.
