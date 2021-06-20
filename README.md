@@ -1,3 +1,3 @@
 # ESP32-Seismometer-Datalogger
  
-<Insert description>
+TODO: Insert description of the project
