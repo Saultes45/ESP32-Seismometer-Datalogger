@@ -185,7 +185,7 @@ void IRAM_ATTR resetModule()
 
   #ifdef SERIAL_VERBOSE
     ets_printf("Problem! Watchdog trigger: reboot or sleep?\r\n");
-    ets_printf("Number of WDT trigger: %d / %d\r\n", nbr_WatchdogTrigger, MAX_NBR_WDT);
+    //ets_printf("Number of WDT trigger: %d / %d\r\n", nbr_WatchdogTrigger, MAX_NBR_WDT);
   #endif
 
   if (nbr_WatchdogTrigger > MAX_NBR_WDT)
