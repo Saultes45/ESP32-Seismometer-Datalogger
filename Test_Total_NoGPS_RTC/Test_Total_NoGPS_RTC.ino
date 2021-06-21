@@ -49,11 +49,17 @@
 // RTC
 #include <RTClib.h> // use the one from Adafruit, not the forks with the same name
 
+// NVM (reset and deep sleep), be carefull not to wear the flash
+#include <Preferences.h>
+volatile Preferences preferences;
 
 // -------------------------- Defines and Const --------------------------
 
-
+// Conditional defines
 #define SERIAL_VERBOSE // Comment out to remove message to the console (and save some exec time and power)
+#define USE_GPS // Comment out to not use any code for the GPS (even the library)
+
+
 
 // CPU frequency
 #define MAX_CPU_FREQUENCY             240
@@ -113,6 +119,23 @@ const char SESSION_SEPARATOR_STRING[]   =  "----------------------------------";
 const uint8_t     LOG_PWR_PIN_1        = 25;    // To turn the geophone ON and OFF
 const uint8_t     LOG_PWR_PIN_2        = 26;    // To turn the geophone ON and OFF
 
+
+//GPS
+#ifdef USE_GPS
+  #include <Adafruit_GPS.h>
+  // Connect to the GPS on the hardware I2C port
+  Adafruit_GPS GPS(&Wire);
+  /*
+   * In case we use the GPS for the timestamps during 
+   * log, we prepare for the case where the GPS cannot
+   * get a fix in time. In that case we revert back to 
+   * using the RTC (also in RTC time but no  [ms])
+   */
+  bool noFixGPS  = true; // Initialise to the worst case: no fix
+  const uint32_t GPS_NO_FIX_TIMEOUT_MS = 10 * S_TO_MS_FACTOR; // 10s
+#endif
+
+
 // -------------------------- Global Variables --------------------------
 
 
@@ -141,8 +164,18 @@ String      fileName              = "";           // Name of the current opened 
 File        dataFile;                               // Only 1 file can be opened at a certain time, <KEEP GLOBAL>
 
 // WATCHDOG
-DateTime lastWatchdogTrigger;     // <NOT YET USED>
-volatile uint32_t nbr_WatchdogTrigger = 0;     // <NOT YET USED>
+//DateTime lastWatchdogTrigger;     // <NOT YET USED>
+//volatile uint32_t nbr_WatchdogTrigger = 0;
+//RTC_DATA_ATTR unsigned long nbr_WatchdogTrigger =0;
+/*
+ * The attribute RTC_DATA_ATTR tells the compiler that 
+ * the variable should be stored in the real 
+ * time clock data area. This is a small area of 
+ * storage in the ESP32 processor that is part of 
+ * the Real Time Clock. This means that the value will be 
+ * set to zero when the ESP32 first powers up but will 
+ * retain its value after a deep sleep. 
+ */
 
 //RTC
 const uint8_t GPS_BOOST_ENA_PIN           = 21;      // To turn the BOOST converter of the GPS ON and OFF
@@ -170,6 +203,10 @@ void      readRS1DBuffer      (void);
 void      parseGeophoneData   (void);
 void      createNewFile       (void);
 void      testSDCard          (void);
+#ifdef USE_GPS
+void      testGPS             (void);
+void      waitForGPSFix       (void);
+#endif
 uint32_t  hex2dec             (char * a);
 void      blinkAnError        (uint8_t errno);
 void      changeCPUFrequency  (void);           // Change the CPU frequency and report about it over serial
@@ -180,30 +217,53 @@ void      changeCPUFrequency  (void);           // Change the CPU frequency and 
 // Watchdog
 void IRAM_ATTR resetModule()
 {
-  nbr_WatchdogTrigger ++; // For statistics
-  lastWatchdogTrigger = rtc.now();
+
+  volatile unsigned int nbr_WDTTrig;
+
+  // NVM
+  //------
+  // RW-mode (second parameter has to be false).
+  // Note: Namespace name is limited to 15 chars.
+  preferences.begin("WDT-NVM", false);
+  // Remove all preferences under the opened namespace
+  //preferences.clear();
+//  // Get the counter value, if the key does not exist, return a default value of 0
+//  // Note: Key name is limited to 15 chars.
+//  volatile unsigned int nbr_WDTTrig = preferences.getUInt("nbr_WDTTrig", 0);
+//  nbr_WDTTrig++; // For statistics
+//  // Store the counter to the Preferences
+//  preferences.putUInt("nbr_WDTTrig", nbr_WDTTrig);
+  // Close the Preferences
+  preferences.end();
+  
+  //lastWatchdogTrigger = rtc.now(); // <NOT YET USED>
+
+  nbr_WDTTrig = 500; // <DEBUG> <REMOVE ASAP>
 
   #ifdef SERIAL_VERBOSE
-    ets_printf("Problem! Watchdog trigger: reboot or sleep?\r\n");
-    //ets_printf("Number of WDT trigger: %d / %d\r\n", nbr_WatchdogTrigger, MAX_NBR_WDT);
+    ets_printf("\r\n**** /!\\ Problem ! /!\\ ****\r\n");
+    ets_printf("\r\nWatchdog trigger: reboot or sleep?\r\n");
+     
+    ets_printf("Number of WDT trigger: %d / %d\r\n", nbr_WDTTrig, MAX_NBR_WDT);
   #endif
 
-  if (nbr_WatchdogTrigger > MAX_NBR_WDT)
+  if (nbr_WDTTrig > MAX_NBR_WDT)
   {
     // Sleep instead of reboot
 
-    #ifdef SERIAL_VERBOSE
-      ets_printf("Sleeping...\r\n");
-    #endif
+    int watchdog_recurrent_time_in_s = 1800;
+//    const uint64_t watchdog_recurrent_time_in_us = 1800;
 
-    const uint64_t watchdog_recurrent_time_in_us = 1800;
+    #ifdef SERIAL_VERBOSE
+      ets_printf("Sleeping for %d s...\r\n", watchdog_recurrent_time_in_s);
+    #endif
 
     // Prepare the sleep with all the required parameters
     esp_err_t err = esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH,ESP_PD_OPTION_OFF);
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM,ESP_PD_OPTION_OFF);
     esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM,ESP_PD_OPTION_OFF);
     // Serial.println("Error = " + String(err)); // Tell the console the error status
-    esp_sleep_enable_timer_wakeup(watchdog_recurrent_time_in_us * S_TO_US_FACTOR); // Set up deep sleep wakeup timer
+    esp_sleep_enable_timer_wakeup(watchdog_recurrent_time_in_s * S_TO_US_FACTOR); // Set up deep sleep wakeup timer
 
 
     // Start the deep sleep
@@ -247,12 +307,12 @@ void setup()
   // ----------------
 
   turnLogON(); // Start the feather datalogger
+  delay(1000);
   testRTC();
   testSDCard();
+  turnLogOFF(); // Turn the feather datalogger OFF, we will go to OVW and we don't need it
 
   currentState = STATE_OVERWATCH;
-  turnLogON(); // Turn the feather datalogger OFF, we will go to OVW and we don't need it
-
 
   // Start the RS1D
   //----------------
@@ -272,10 +332,18 @@ void setup()
   // Preaparing the night watch (watchdog)
   //-------------------------------------
   // Remember to hold the door
+  #ifdef SERIAL_VERBOSE
+  Serial.print("Preparing watchdog, timeout is: ");
+  Serial.print(wdtTimeout);
+  Serial.println(" [s]");
+  #endif
   timer = timerBegin(0, 80, true);                  //timer 0, div 80
   timerAttachInterrupt(timer, &resetModule, true);  //attach callback
   timerAlarmWrite(timer, wdtTimeout * S_TO_US_FACTOR, false); // set time is in [us]
-  // Enable all the ISR later
+  // The ISR is enabled later (@ the end of the "set up") but timer has already started
+    #ifdef SERIAL_VERBOSE
+  Serial.println("Watchdog timer started, no ISR yet");
+  #endif
 
 #ifdef SERIAL_VERBOSE
   Serial.println("And here, we, go, ...");
@@ -284,7 +352,14 @@ void setup()
 
   // Enable all ISRs
   //----------------
+  #ifdef SERIAL_VERBOSE
+  Serial.println("Watchdog ISR ready");
+  #endif
   timerAlarmEnable(timer);     // Watchdog
+
+  delay(wdtTimeout * S_TO_MS_FACTOR); // DEBUG: trigger watchdog at every loop
+  delay(wdtTimeout * S_TO_MS_FACTOR); // DEBUG: trigger watchdog at every loop
+
 
 }
 
@@ -335,12 +410,16 @@ void loop() {
 
             // Start the feather datalogger
             turnLogON();
-			delay(50); // wait for the feather to be ready
-			// Start the GPS
-            turnGPSON();
+			      delay(50); // Wait 50ms for the feather to be ready
+			      // Start the GPS
+            turnGPSON(); // It will take 1.9s to get the 1st GPS message (no fix)
+            // We dont need to wait for stable power of fix <DEBUG: are you sure>
 
             // Create a new file
-            createNewFile();
+
+            // Set up the GPS so it is ready to be used for LOG (timestamps)
+            testGPS();
+            waitForGPSFix(); // This is blocking
           }
           else
           {
@@ -682,14 +761,25 @@ void logToSDCard(void) {
   //--------------------------------
   dataString += SOM_LOG;
 
-  // Read the RTC time (will be GPS soon)
-  //------------------------------------------
-  time_loop = rtc.now(); // MUST be global!!!!! or it won't update
-  // We are obliged to do that horror because the method "toString" input parameter is also the output
-  char timeStamp[sizeof(timeStampFormat_Line)];
-  strncpy(timeStamp, timeStampFormat_Line, sizeof(timeStampFormat_Line));
-  dataString += time_loop.toString(timeStamp);
-  dataString += ".000"; // add the [ms] placeholder 
+  if (noFixGPS) // Then use RTC
+  {
+     // Read the RTC time
+    //------------------------------------------
+    time_loop = rtc.now(); // MUST be global!!!!! or it won't update
+    // We are obliged to do that horror because the method "toString" input parameter is also the output
+    char timeStamp[sizeof(timeStampFormat_Line)];
+    strncpy(timeStamp, timeStampFormat_Line, sizeof(timeStampFormat_Line));
+    dataString += time_loop.toString(timeStamp);
+    dataString += ".000"; // add the [ms] placeholder 
+    
+  }
+  else // Then use GPS
+  {
+    dataString += "2011_11_11__11_11_11.100"; <DEBUG>
+  }
+
+
+ 
   dataString += FORMAT_SEP;
 
   // Write the accelerations in the message
@@ -1037,6 +1127,118 @@ void changeCPUFrequency(void)
   Serial.println("----------------------------------------");
   #endif
 }
+
+//******************************************************************************************
+#ifdef USE_GPS
+void testGPS(void)
+{
+
+  #ifdef SERIAL_VERBOSE
+  Serial.println("Starting to adress the GPS...");
+  #endif
+  
+  GPS.begin(0x10);  // The I2C address to use is 0x10
+
+  #ifdef SERIAL_VERBOSE
+  Serial.println("Changing GPS settings...");
+  #endif
+  // Turn OFF all GPS output
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_OFF);
+
+  //  GPS.flush();
+
+  // Set up communication
+  // ---------------------
+  GPS.sendCommand(PMTK_SET_BAUD_115200); // Ask the GPS to send us data as 115200
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ); // 10 Hz update rate (message only)
+  GPS.sendCommand(PMTK_API_SET_FIX_CTL_5HZ);  // Can't fix position faster than 5 times a second
+
+
+  // Just once, request updates on antenna status, comment out to keep quiet
+  GPS.sendCommand(PGCMD_ANTENNA);
+//  delay(1000);
+  //  Just once, request firmware version
+  GPS.println(PMTK_Q_RELEASE);
+//  delay(1000);
+
+  // Turn on RMC (recommended minimum) and GGA (fix data) including altitude
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
+
+  #ifdef SERIAL_VERBOSE
+  Serial.println("GPS set up done");
+  #endif
+}
+#endif
+
+//******************************************************************************************
+#ifdef USE_GPS
+void waitForGPSFix(void)
+{
+
+  #ifdef SERIAL_VERBOSE
+  Serial.print("Starting to wait for GPS fix");
+  Serial.print("Timeout is: ");
+  Serial.print(GPS_NO_FIX_TIMEOUT_MS);
+  Serial.println(" [s] or until watchdog trigger IF bloked");
+  #endif
+  
+
+  // 2 securities: internal: timeout AND external: watchdog
+  unsigned long startedWaiting = millis();
+
+  noFixGPS  = true; // Init
+
+  // Big waiting loop
+  // -----------------
+  while (noFixGPS && (millis() - startedWaiting <= GPS_NO_FIX_TIMEOUT_MS))
+  {
+
+      // Reset the timer (i.e. feed the watchdog)
+      //------------------------------------------
+      timerWrite(timer, 0); // need to be before a potential sleep
+      
+    // read data from the GPS in the 'main loop'
+    char c = GPS.read();
+  
+    // if a sentence is received, we can check the checksum, parse it...
+    if (GPS.newNMEAreceived()) {
+  
+  
+      if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
+      return; // we can fail to parse a sentence in which case we should just wait for another
+  
+      if(not(GPS.fix))
+      {
+        #ifdef SERIAL_VERBOSE
+        Serial.print("Still no fix, keep looping for: ");
+        Serial.print(GPS_NO_FIX_TIMEOUT_MS - (millis() - startedWaiting));
+        Serial.println(" [s]");
+        Serial.print("Fix: ");
+        Serial.print((int)GPS.fix);
+        Serial.print(" quality: ");
+        Serial.println((int)GPS.fixquality);
+        #endif
+      }
+      else
+      {
+        noFixGPS = false; // We have a fix! Yay!
+      }
+
+      // Reset the timer (i.e. feed the watchdog)
+      //------------------------------------------
+      timerWrite(timer, 0); // need to be before a potential sleep
+  }
+  }
+  
+        #ifdef SERIAL_VERBOSE
+        Serial.println("Done waiting for GPS fix, is there a fix?...");
+        Serial.print("Fix: ");
+        Serial.print((int)GPS.fix);
+        Serial.print(" quality: ");
+        Serial.println((int)GPS.fixquality);
+        #endif
+}
+#endif
 
 
 // END OF SCRIPT
