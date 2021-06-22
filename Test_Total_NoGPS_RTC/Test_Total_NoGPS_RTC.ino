@@ -50,9 +50,14 @@
 #include <RTClib.h> // use the one from Adafruit, not the forks with the same name
 
 // NVM (reset and deep sleep), be carefull not to wear the flash
-#include <Preferences.h>
-volatile Preferences preferences;
+//#include <Preferences.h>
+//Preferences preferences;
 
+#include "EEPROM.h"
+// the current address in the EEPROM (i.e. which byte
+// we're going to write to next)
+volatile int EEPROM_WDT_ADDRS = 0; // This will store 1 byte: there are 512 bytes in the EEPROM
+volatile int EEPROM_SIZE = 1; // in bytes
 // -------------------------- Defines and Const --------------------------
 
 // Conditional defines
@@ -109,6 +114,7 @@ const uint8_t RS1D_PWR_PIN_1              = 14;      // To turn the geophone ON 
 hw_timer_t * timer = NULL;
 const uint8_t wdtTimeout = 3; // Watchdog timeout in [s]
 const uint8_t  MAX_NBR_WDT = 10;
+const int WDT_SLP_RECUR_S = 1800; // Be careful for the type as the esprintf doesn't like some of them
 
 // LOG+SD
 #define PIN_CS_SD                   33     // Chip Select (ie CS/SS) for SPI for SD card
@@ -211,48 +217,141 @@ uint32_t  hex2dec             (char * a);
 void      blinkAnError        (uint8_t errno);
 void      changeCPUFrequency  (void);           // Change the CPU frequency and report about it over serial
 
-
-
-// -------------------------- ISR ----------------
-// Watchdog
-void IRAM_ATTR resetModule()
+unsigned int turnLEDTest(void)
 {
+  digitalWrite(LED_BUILTIN, HIGH);
 
-  volatile unsigned int nbr_WDTTrig;
+   unsigned int counter; // this cannot excede [0,254] inclusive
 
-  // NVM
-  //------
-  // RW-mode (second parameter has to be false).
-  // Note: Namespace name is limited to 15 chars.
-  preferences.begin("WDT-NVM", false);
-  // Remove all preferences under the opened namespace
-  //preferences.clear();
+  // NVM (using EEPROM library)
+  //------------------------------
+
+    ets_printf("Reading from NVM...\r\n");
+    counter = byte(EEPROM.read(EEPROM_WDT_ADDRS)); // Read from EEPROM
+    ets_printf("Reading  done\r\n");
+  
+    counter++; // For statistics
+  
+    if (counter >= 254)
+    {
+      counter = 254;
+    }
+
+portMUX_TYPE myMutex = portMUX_INITIALIZER_UNLOCKED;
+taskENTER_CRITICAL(&myMutex);
+
+    ets_printf("Writting to NVM...\r\n");
+    //EEPROM.write(EEPROM_WDT_ADDRS, byte(5));
+    ets_printf("Writing  done\r\n");
+    
+    //EEPROM.commit(); // Close the NVS for W- mode, R- is still ok
+    //EEPROM.end();
+    ets_printf("NVM closed\r\n");
+
+taskEXIT_CRITICAL(&myMutex);
+
+//  // RW-mode (second parameter has to be false).
+//  // Note: Namespace name is limited to 15 chars.
+//  preferences.begin("wdt-nvm", true);
+//
+//    // Remove all preferences under the opened namespace
+//  //preferences.clear();
+//  
 //  // Get the counter value, if the key does not exist, return a default value of 0
 //  // Note: Key name is limited to 15 chars.
-//  volatile unsigned int nbr_WDTTrig = preferences.getUInt("nbr_WDTTrig", 0);
-//  nbr_WDTTrig++; // For statistics
-//  // Store the counter to the Preferences
-//  preferences.putUInt("nbr_WDTTrig", nbr_WDTTrig);
-  // Close the Preferences
-  preferences.end();
+//  ets_printf("Reading from NVM...\r\n");
+//  counter = preferences.getUInt("counter", 0);
+//  ets_printf("\r\nReading  done\r\n");
+//
+//    counter++; // For statistics
+//  
+////  // Store the counter to the Preferences
+//ets_printf("Writting to NVM...\r\n");
+//
+////portMUX_TYPE myMutex = portMUX_INITIALIZER_UNLOCKED;
+////taskENTER_CRITICAL(&myMutex);
+//////critical section
+////preferences.putUInt("counter", 99u);
+////taskEXIT_CRITICAL(&myMutex);
+////uint32_t volatile register ilevel = XTOS_DISABLE_ALL_INTERRUPTS;
+////critical section
+////  preferences.putUInt("counter", 99u);
+////XTOS_RESTORE_INTLEVEL(ilevel);
+//
+//
+//  ets_printf("Writing  done\r\n");
+//
+//  // Close the Preferences
+//  ets_printf("Closing NVM...\r\n");
+//  preferences.end();
+//  ets_printf("Closed\r\n");
+
+  return counter;
   
+}
+
+// -------------------------- ISR ----------------
+// Watchdog (IRAM_ATTR)
+void  resetModule()
+{
+unsigned int counter; // this cannot excede [0,254] inclusive
+unsigned int nbr_WDTTrig; // <LOCAL>
+  //volatile unsigned int nbr_WDTTrig;
+  //unsigned int nbr_WDTTrig;
+  
+  // Stop the timer
+//  timer(hw_timer_disarm());
+  timerAlarmDisable(timer); // You need to be careful of the order: 1st disable the IST, 2nd stop the timer
+  timerEnd(timer);
+  timer = NULL;
+  
+
+  // Disable/Detach interrupts
+  //detachInterrupt(interrupt);
+  noInterrupts();
+
+  ets_printf("Reading from NVM...\r\n");
+  counter = byte(EEPROM.read(EEPROM_WDT_ADDRS)); // Read from EEPROM
+  ets_printf("Reading  done\r\n");
+
+      counter++; // For statistics
+  
+    if (counter >= 254)
+    {
+      counter = 254;
+    }
+
+
+  ets_printf("Writting to NVM...\r\n");
+  EEPROM.write(EEPROM_WDT_ADDRS, byte(5));
+  ets_printf("Writing  done\r\n");
+  
+  EEPROM.commit(); // Close the NVS for W- mode, R- is still ok
+  //EEPROM.end();
+  ets_printf("NVM closed\r\n");
+
+  nbr_WDTTrig = counter;
+
+  //nbr_WDTTrig = turnLEDTest();
+  ets_printf("Number of WDT triggers: %d / %d\r\n", nbr_WDTTrig, MAX_NBR_WDT);
+
+
   //lastWatchdogTrigger = rtc.now(); // <NOT YET USED>
 
-  nbr_WDTTrig = 500; // <DEBUG> <REMOVE ASAP>
+  nbr_WDTTrig = 12; // <DEBUG> <REMOVE ASAP>
 
   #ifdef SERIAL_VERBOSE
     ets_printf("\r\n**** /!\\ Problem ! /!\\ ****\r\n");
     ets_printf("\r\nWatchdog trigger: reboot or sleep?\r\n");
-     
-    ets_printf("Number of WDT trigger: %d / %d\r\n", nbr_WDTTrig, MAX_NBR_WDT);
+    ets_printf("Number of WDT triggers: %d / %d\r\n", nbr_WDTTrig, MAX_NBR_WDT);
   #endif
 
   if (nbr_WDTTrig > MAX_NBR_WDT)
   {
     // Sleep instead of reboot
 
-    int watchdog_recurrent_time_in_s = 1800;
-//    const uint64_t watchdog_recurrent_time_in_us = 1800;
+    int watchdog_recurrent_time_in_s = WDT_SLP_RECUR_S;
+//    const uint64_t watchdog_recurrent_time_in_us = 1800; // the ets_printf doesn't like that
 
     #ifdef SERIAL_VERBOSE
       ets_printf("Sleeping for %d s...\r\n", watchdog_recurrent_time_in_s);
@@ -276,6 +375,10 @@ void IRAM_ATTR resetModule()
     #endif
 
     esp_restart();
+
+    #ifdef SERIAL_VERBOSE
+      ets_printf("You shouldn't see this message\r\n");
+    #endif
   }
 }
 
@@ -290,6 +393,12 @@ void setup()
 #endif
 
   changeCPUFrequency(); // Limit CPU frequency to limit power consumption
+
+
+    if (!EEPROM.begin(EEPROM_SIZE))
+    {
+      Serial.println("failed to initialise EEPROM");
+    }
 
   // Declare pins
   // -------------
@@ -323,7 +432,7 @@ void setup()
   GeophoneSerial.begin(GEOPHONE_BAUD_RATE);
   GeophoneSerial.setTimeout(GEOPHONE_TIMEOUT_MS); // Set the timeout in [ms] (for findUntil)
 
-  waitForRS1DWarmUp();
+  //waitForRS1DWarmUp();
 
 #ifdef SERIAL_VERBOSE
   Serial.println("The next transmission might be the last transmission to the PC, if you turned verbose OFF");
@@ -341,7 +450,7 @@ void setup()
   timerAttachInterrupt(timer, &resetModule, true);  //attach callback
   timerAlarmWrite(timer, wdtTimeout * S_TO_US_FACTOR, false); // set time is in [us]
   // The ISR is enabled later (@ the end of the "set up") but timer has already started
-    #ifdef SERIAL_VERBOSE
+  #ifdef SERIAL_VERBOSE
   Serial.println("Watchdog timer started, no ISR yet");
   #endif
 
@@ -365,7 +474,9 @@ void setup()
 
 
 // -------------------------- Loop --------------------------
-void loop() {
+void loop() 
+{
+  
 
   readRS1DBuffer();
 
@@ -775,7 +886,7 @@ void logToSDCard(void) {
   }
   else // Then use GPS
   {
-    dataString += "2011_11_11__11_11_11.100"; <DEBUG>
+    dataString += "2011_11_11__11_11_11.100"; // <DEBUG>
   }
 
 
