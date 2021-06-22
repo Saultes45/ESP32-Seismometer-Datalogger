@@ -49,15 +49,7 @@
 // RTC
 #include <RTClib.h> // use the one from Adafruit, not the forks with the same name
 
-// NVM (reset and deep sleep), be carefull not to wear the flash
-//#include <Preferences.h>
-//Preferences preferences;
 
-#include "EEPROM.h"
-// the current address in the EEPROM (i.e. which byte
-// we're going to write to next)
-volatile int EEPROM_WDT_ADDRS = 0; // This will store 1 byte: there are 512 bytes in the EEPROM
-volatile int EEPROM_SIZE = 1; // in bytes
 // -------------------------- Defines and Const --------------------------
 
 // Conditional defines
@@ -217,87 +209,14 @@ uint32_t  hex2dec             (char * a);
 void      blinkAnError        (uint8_t errno);
 void      changeCPUFrequency  (void);           // Change the CPU frequency and report about it over serial
 
-unsigned int turnLEDTest(void)
-{
-  digitalWrite(LED_BUILTIN, HIGH);
 
-   unsigned int counter; // this cannot excede [0,254] inclusive
-
-  // NVM (using EEPROM library)
-  //------------------------------
-
-    ets_printf("Reading from NVM...\r\n");
-    counter = byte(EEPROM.read(EEPROM_WDT_ADDRS)); // Read from EEPROM
-    ets_printf("Reading  done\r\n");
-  
-    counter++; // For statistics
-  
-    if (counter >= 254)
-    {
-      counter = 254;
-    }
-
-portMUX_TYPE myMutex = portMUX_INITIALIZER_UNLOCKED;
-taskENTER_CRITICAL(&myMutex);
-
-    ets_printf("Writting to NVM...\r\n");
-    //EEPROM.write(EEPROM_WDT_ADDRS, byte(5));
-    ets_printf("Writing  done\r\n");
-    
-    //EEPROM.commit(); // Close the NVS for W- mode, R- is still ok
-    //EEPROM.end();
-    ets_printf("NVM closed\r\n");
-
-taskEXIT_CRITICAL(&myMutex);
-
-//  // RW-mode (second parameter has to be false).
-//  // Note: Namespace name is limited to 15 chars.
-//  preferences.begin("wdt-nvm", true);
-//
-//    // Remove all preferences under the opened namespace
-//  //preferences.clear();
-//  
-//  // Get the counter value, if the key does not exist, return a default value of 0
-//  // Note: Key name is limited to 15 chars.
-//  ets_printf("Reading from NVM...\r\n");
-//  counter = preferences.getUInt("counter", 0);
-//  ets_printf("\r\nReading  done\r\n");
-//
-//    counter++; // For statistics
-//  
-////  // Store the counter to the Preferences
-//ets_printf("Writting to NVM...\r\n");
-//
-////portMUX_TYPE myMutex = portMUX_INITIALIZER_UNLOCKED;
-////taskENTER_CRITICAL(&myMutex);
-//////critical section
-////preferences.putUInt("counter", 99u);
-////taskEXIT_CRITICAL(&myMutex);
-////uint32_t volatile register ilevel = XTOS_DISABLE_ALL_INTERRUPTS;
-////critical section
-////  preferences.putUInt("counter", 99u);
-////XTOS_RESTORE_INTLEVEL(ilevel);
-//
-//
-//  ets_printf("Writing  done\r\n");
-//
-//  // Close the Preferences
-//  ets_printf("Closing NVM...\r\n");
-//  preferences.end();
-//  ets_printf("Closed\r\n");
-
-  return counter;
-  
-}
 
 // -------------------------- ISR ----------------
 // Watchdog (IRAM_ATTR)
 void  resetModule()
 {
-unsigned int counter; // this cannot excede [0,254] inclusive
-unsigned int nbr_WDTTrig; // <LOCAL>
-  //volatile unsigned int nbr_WDTTrig;
-  //unsigned int nbr_WDTTrig;
+
+unsigned int nbr_WDTTrig;
   
   // Stop the timer
 //  timer(hw_timer_disarm());
@@ -309,32 +228,6 @@ unsigned int nbr_WDTTrig; // <LOCAL>
   // Disable/Detach interrupts
   //detachInterrupt(interrupt);
   noInterrupts();
-
-  ets_printf("Reading from NVM...\r\n");
-  counter = byte(EEPROM.read(EEPROM_WDT_ADDRS)); // Read from EEPROM
-  ets_printf("Reading  done\r\n");
-
-      counter++; // For statistics
-  
-    if (counter >= 254)
-    {
-      counter = 254;
-    }
-
-
-  ets_printf("Writting to NVM...\r\n");
-  EEPROM.write(EEPROM_WDT_ADDRS, byte(5));
-  ets_printf("Writing  done\r\n");
-  
-  EEPROM.commit(); // Close the NVS for W- mode, R- is still ok
-  //EEPROM.end();
-  ets_printf("NVM closed\r\n");
-
-  nbr_WDTTrig = counter;
-
-  //nbr_WDTTrig = turnLEDTest();
-  ets_printf("Number of WDT triggers: %d / %d\r\n", nbr_WDTTrig, MAX_NBR_WDT);
-
 
   //lastWatchdogTrigger = rtc.now(); // <NOT YET USED>
 
@@ -351,8 +244,7 @@ unsigned int nbr_WDTTrig; // <LOCAL>
     // Sleep instead of reboot
 
     int watchdog_recurrent_time_in_s = WDT_SLP_RECUR_S;
-//    const uint64_t watchdog_recurrent_time_in_us = 1800; // the ets_printf doesn't like that
-
+    
     #ifdef SERIAL_VERBOSE
       ets_printf("Sleeping for %d s...\r\n", watchdog_recurrent_time_in_s);
     #endif
@@ -394,12 +286,6 @@ void setup()
 
   changeCPUFrequency(); // Limit CPU frequency to limit power consumption
 
-
-    if (!EEPROM.begin(EEPROM_SIZE))
-    {
-      Serial.println("failed to initialise EEPROM");
-    }
-
   // Declare pins
   // -------------
   pinSetUp();
@@ -434,10 +320,6 @@ void setup()
 
   //waitForRS1DWarmUp();
 
-#ifdef SERIAL_VERBOSE
-  Serial.println("The next transmission might be the last transmission to the PC, if you turned verbose OFF");
-#endif
-
   // Preaparing the night watch (watchdog)
   //-------------------------------------
   // Remember to hold the door
@@ -466,8 +348,8 @@ void setup()
   #endif
   timerAlarmEnable(timer);     // Watchdog
 
-  delay(wdtTimeout * S_TO_MS_FACTOR); // DEBUG: trigger watchdog at every loop
-  delay(wdtTimeout * S_TO_MS_FACTOR); // DEBUG: trigger watchdog at every loop
+  //delay(wdtTimeout * S_TO_MS_FACTOR); // DEBUG: trigger watchdog at every loop
+  //delay(wdtTimeout * S_TO_MS_FACTOR); // DEBUG: trigger watchdog at every loop
 
 
 }
@@ -524,13 +406,14 @@ void loop()
 			      delay(50); // Wait 50ms for the feather to be ready
 			      // Start the GPS
             turnGPSON(); // It will take 1.9s to get the 1st GPS message (no fix)
-            // We dont need to wait for stable power of fix <DEBUG: are you sure>
 
             // Create a new file
 
             // Set up the GPS so it is ready to be used for LOG (timestamps)
             testGPS();
             waitForGPSFix(); // This is blocking
+            // Create a new file
+            createNewFile();
           }
           else
           {
@@ -1183,15 +1066,27 @@ void createNewFile(void) {
 
   cntFile ++; // Increment the counter of files
 
-  // To name the file we need to know the date : ask the RTC
-  timestampForFileName = rtc.now(); // MUST be global!!!!! or it won't update
+  // To name the file we need to know the date : ask the GPS or the RTC
+  
   fileName = "";                    // Reset the filename
   fileName += "/";                  // To tell it to put in the root folder, absolutely necessary
 
-  char timeStamp[sizeof(timeStampFormat_FileName)]; // We are obliged to do that horror because the method "toString" input parameter is also the output
-  strncpy(timeStamp, timeStampFormat_FileName, sizeof(timeStampFormat_FileName));
-  fileName += timestampForFileName.toString(timeStamp);
-
+if (noFixGPS) // Then use RTC
+  {
+    // Read the RTC time
+    //------------------------------------------
+     timestampForFileName = rtc.now(); // MUST be global!!!!! or it won't update
+    char timeStamp[sizeof(timeStampFormat_FileName)]; // We are obliged to do that horror because the method "toString" input parameter is also the output
+    strncpy(timeStamp, timeStampFormat_FileName, sizeof(timeStampFormat_FileName));
+    fileName += timestampForFileName.toString(timeStamp);
+  }
+  else // Then use GPS
+  {
+    // Read the GPS time
+    //------------------------------------------
+    fileName += "2011_11_11__11_11_11"; // <DEBUG>
+  }
+  
   fileName += "-"; // Add a separator between datetime and filenumber
 
   char buffer[5];
@@ -1287,10 +1182,10 @@ void waitForGPSFix(void)
 {
 
   #ifdef SERIAL_VERBOSE
-  Serial.print("Starting to wait for GPS fix");
+  Serial.println("Starting to wait for GPS fix");
   Serial.print("Timeout is: ");
   Serial.print(GPS_NO_FIX_TIMEOUT_MS);
-  Serial.println(" [s] or until watchdog trigger IF bloked");
+  Serial.println(" [ms] or until watchdog trigger IF bloked");
   #endif
   
 
@@ -1299,11 +1194,29 @@ void waitForGPSFix(void)
 
   noFixGPS  = true; // Init
 
+  // < DEBUG > <REMOVE WHEN FINISHED>
+  unsigned int cnt_whileLoop = 0;
+  Serial.print((millis() - startedWaiting));
+  Serial.print(" < ");
+  Serial.print(GPS_NO_FIX_TIMEOUT_MS);
+  Serial.println(" ?");
+  Serial.printf("Looping %d\r\n", cnt_whileLoop);
+
   // Big waiting loop
   // -----------------
-  while (noFixGPS && (millis() - startedWaiting <= GPS_NO_FIX_TIMEOUT_MS))
+  while (noFixGPS && ((millis() - startedWaiting) <= GPS_NO_FIX_TIMEOUT_MS))
   {
+    
 
+        // < DEBUG > <REMOVE WHEN FINISHED>
+        cnt_whileLoop ++;
+      Serial.print((millis() - startedWaiting));
+      Serial.print(" < ");
+      Serial.print(GPS_NO_FIX_TIMEOUT_MS);
+      Serial.println(" ?");
+      Serial.printf("Looping %d\r\n", cnt_whileLoop);
+      Serial.printf("Still waiting for fix? %d\r\n", noFixGPS);
+      
       // Reset the timer (i.e. feed the watchdog)
       //------------------------------------------
       timerWrite(timer, 0); // need to be before a potential sleep
