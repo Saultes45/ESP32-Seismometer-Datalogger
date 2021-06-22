@@ -8,6 +8,8 @@ Questions (project manager):
 
 // important
 
+1. Productions: should we spend time ordereing and preparing the w/ the "SMT assembly" or solder by oursleft (probably have already most of the components)
+
 1. Should we keep track of the bumps during LOG and do a LOG-LOG transition
 
 1. Can we use only RMC for GPS time 
