@@ -32,182 +32,17 @@
 *
 */
 
-// -------------------------- Includes --------------------------
-//ESP32
-#include <esp_system.h>
-#include <rom/rtc.h> // reset reason
+// -------------------------- Conditional defines --------------------------
 
-
-//String Formatting
-#include <string.h>
-#include <stdio.h>
-
-//SD card
-#include <SPI.h>
-#include <SD.h>
-
-// RTC
-#include <RTClib.h> // use the one from Adafruit, not the forks with the same name
-
-
-// -------------------------- Defines and Const --------------------------
-
-// Conditional defines
 #define SERIAL_VERBOSE // Comment out to remove message to the console (and save some exec time and power)
-#define USE_GPS // Comment out to not use any code for the GPS (even the library)
+#define USE_GPS        // Comment out to not use any code for the GPS (even the library)
 
 
+// -------------------------- Includes --------------------------
 
-// CPU frequency
-#define MAX_CPU_FREQUENCY             240
-#define TARGET_CPU_FREQUENCY          40
-
-
-// Battery
-#define BATT_VOLTAGE_DIVIDER_FACTOR   2       // [N/A]
-#define LOW_BATTERY_THRESHOLD         3.1     // in [V]
-#define BATT_PIN                      35      // To detect the Lipo battery remaining charge, GPIO35 on Adafruit ESP32 (35 on dev kit)
+#include "parameters.h"
 
 
-// STATE MACHINE
-#ifndef STATES_H
-#define STATES_H
-#define STATE_OVERWATCH      (3u)
-#define STATE_SLEEP          (2u)
-#define STATE_LOG            (1u)
-#define STATE_EMPTY          (0u)
-#endif /* STATES_H */
-
-#define NBR_OVERWATCH_BEFORE_ACTION     50
-#define NBR_BUMPS_DETECTED_BEFORE_LOG   100
-#define NBR_LOG_BEFORE_ACTION           75
-#define TIME_TO_SLEEP               10          // In [s], time spent in the deep sleep state
-#define S_TO_US_FACTOR              1000000ULL  // Conversion factor from [s] to [us] for the deepsleep // Source: https://github.com/espressif/arduino-esp32/issues/3286
-#define S_TO_MS_FACTOR              1000        // Conversion factor from [s] to [ms] for the delay
-
-// Bump detection
-const int32_t BUMP_THRESHOLD_POS = +100000;
-const int32_t BUMP_THRESHOLD_NEG = -100000;
-
-
-// RS1D
-
-const uint8_t  NBR_ACCELERATIONS_PER_MESSAGE   = 50; // scope controlled  + cannot be reassigned
-#define       RX_BUFFER_SIZE        650     //640 actually needed, margin of 10 observed
-const unsigned long RS1D_DEPILE_TIMEOUT_MS   = 100;  // in [ms]
-const uint16_t    RS1D_WARMUP_TIME_MS      = 5000; // in [ms]
-#define       GEOPHONE_BAUD_RATE    230400    // Baudrate in [bauds] for serial communication with the Geophone
-#define       GEOPHONE_TIMEOUT_MS    100     // For the character search in buffer, in [ms]
-#define       GeophoneSerial        Serial1   // Use the 2nd (out of 3) hardware serial of the ESP32
-const uint8_t RS1D_PWR_PIN_1              = 14;      // To turn the geophone ON and OFF
-
-
-// WATCHDOG
-hw_timer_t * timer = NULL;
-const uint8_t wdtTimeout = 3; // Watchdog timeout in [s]
-const uint8_t  MAX_NBR_WDT = 10;
-const int WDT_SLP_RECUR_S = 1800; // Be careful for the type as the esprintf doesn't like some of them
-
-// LOG+SD
-#define PIN_CS_SD                   33     // Chip Select (ie CS/SS) for SPI for SD card
-const char SOM_LOG                = '$'; // Start of message indicator, mostly used for heath check (no checksum)
-const char FORMAT_SEP               = ','; // Separator between the different files so that the data can be read/parsed by softwares
-const uint16_t MAX_LINES_PER_FILES    = NBR_LOG_BEFORE_ACTION;  // Maximum number of lines that we want stored in 1 SD card file. It should be about ...min worth
-const char SESSION_SEPARATOR_STRING[]   =  "----------------------------------";
-const uint8_t     LOG_PWR_PIN_1        = 25;    // To turn the geophone ON and OFF
-const uint8_t     LOG_PWR_PIN_2        = 26;    // To turn the geophone ON and OFF
-
-
-//GPS
-#ifdef USE_GPS
-  #include <Adafruit_GPS.h>
-  // Connect to the GPS on the hardware I2C port
-  Adafruit_GPS GPS(&Wire);
-  /*
-   * In case we use the GPS for the timestamps during 
-   * log, we prepare for the case where the GPS cannot
-   * get a fix in time. In that case we revert back to 
-   * using the RTC (also in RTC time but no  [ms])
-   */
-  bool noFixGPS  = true; // Initialise to the worst case: no fix
-  const uint32_t GPS_NO_FIX_TIMEOUT_MS = 10 * S_TO_MS_FACTOR; // 10s
-#endif
-
-
-// -------------------------- Global Variables --------------------------
-
-
-// RS1D
-char    RS1Dmessage[RX_BUFFER_SIZE];      // Have you seen the sheer size of that!!! Time...to die.
-bool  goodMessageReceived_flag    = false;  // Set to "bad message" first
-int32_t seismometerAcc[NBR_ACCELERATIONS_PER_MESSAGE];
-uint8_t nbr_bumpDetectedLast    = 0;        // Max of 50; // This should be the output of a function and should be local
-
-
-// State Machine
-volatile uint8_t  currentState      = STATE_EMPTY;  // Used to store which step we are at, default is state "empty"
-volatile uint8_t  nextState         = STATE_EMPTY;  // Used to store which step we are going to do next, default is state "empty"
-uint8_t       cnt_Overwatch         = 0;      // This does NOT need to survive reboots NOR ISR, just global
-uint8_t       cnt_Log               = 0;      // This does NOT need to survive reboots NOR ISR, just global
-uint16_t      nbr_bumpDetectedTotal   = 0;      // <KEEP GLOBAL>, max of 50*nbr overwatch
-uint8_t       nbr_messagesWithBumps   = 0;      // <KEEP GLOBAL>, max of nbr overwatch
-
-
-// LOG + SD
-char    timeStampFormat_Line[]      = "YYYY_MM_DD__hh_mm_ss";   // naming convention for EACH LINE OF THE FILE logged to the SD card
-char    timeStampFormat_FileName[]  = "YYYY_MM_DD__hh_mm_ss";   // naming convention for EACH FILE NAME created on the SD card
-uint16_t    cntLinesInFile        = 0;            // Written at the end of a file for check (36,000 < 65,535)
-uint32_t    cntFile               = 0;            // Counter that counts the files written in the SD card this session (we don't include prvious files), included in the name of the file, can handle 0d to 99999d (need 17 bits)
-String      fileName              = "";           // Name of the current opened file on the SD card
-File        dataFile;                               // Only 1 file can be opened at a certain time, <KEEP GLOBAL>
-
-// WATCHDOG
-//DateTime lastWatchdogTrigger;     // <NOT YET USED>
-//volatile uint32_t nbr_WatchdogTrigger = 0;
-//RTC_DATA_ATTR unsigned long nbr_WatchdogTrigger =0;
-/*
- * The attribute RTC_DATA_ATTR tells the compiler that 
- * the variable should be stored in the real 
- * time clock data area. This is a small area of 
- * storage in the ESP32 processor that is part of 
- * the Real Time Clock. This means that the value will be 
- * set to zero when the ESP32 first powers up but will 
- * retain its value after a deep sleep. 
- */
-
-//RTC
-const uint8_t GPS_BOOST_ENA_PIN           = 21;      // To turn the BOOST converter of the GPS ON and OFF
-RTC_PCF8523         rtc;
-DateTime            time_loop;             // MUST be global!!!!! or it won't update
-DateTime            timestampForFileName;  // MUST be global!!!!! or it won't update
-
-// -------------------------- Functions declaration --------------------------
-void      pinSetUp            (void);
-void      checkBatteryLevel   (void);
-
-void      turnRS1DOFF         (void);
-void      turnRS1DON          (void);
-
-void      turnLogOFF          (void);
-void      turnLogON           (void);
-
-void      turnGPSOFF          (void);
-void      turnGPSON           (void);
-
-void      waitForRS1DWarmUp   (void);
-void      testRTC             (void);
-void      logToSDCard         (void);
-void      readRS1DBuffer      (void);
-void      parseGeophoneData   (void);
-void      createNewFile       (void);
-void      testSDCard          (void);
-#ifdef USE_GPS
-void      testGPS             (void);
-void      waitForGPSFix       (void);
-#endif
-uint32_t  hex2dec             (char * a);
-void      blinkAnError        (uint8_t errno);
-void      changeCPUFrequency  (void);           // Change the CPU frequency and report about it over serial
 
 
 
@@ -219,19 +54,24 @@ void  resetModule()
 unsigned int nbr_WDTTrig;
   
   // Stop the timer
-//  timer(hw_timer_disarm());
+  //----------------
+  //  timer(hw_timer_disarm());
   timerAlarmDisable(timer); // You need to be careful of the order: 1st disable the IST, 2nd stop the timer
   timerEnd(timer);
   timer = NULL;
   
-
   // Disable/Detach interrupts
+  //--------------------------
   //detachInterrupt(interrupt);
   noInterrupts();
 
   //lastWatchdogTrigger = rtc.now(); // <NOT YET USED>
 
-  nbr_WDTTrig = 12; // <DEBUG> <REMOVE ASAP>
+  //nbr_WDTTrig = 12; // <DEBUG> <REMOVE ASAP>
+  nbr_WDTTrig = MAX_NBR_WDT; // To make sure the module chooses to sleep
+
+
+  nbr_WDTTrig++;
 
   #ifdef SERIAL_VERBOSE
     ets_printf("\r\n**** /!\\ Problem ! /!\\ ****\r\n");
@@ -301,11 +141,11 @@ void setup()
   // Set up RTC + SD
   // ----------------
 
-  turnLogON(); // Start the feather datalogger
-  delay(1000);
-  testRTC();
-  testSDCard();
-  turnLogOFF(); // Turn the feather datalogger OFF, we will go to OVW and we don't need it
+//  turnLogON(); // Start the feather datalogger
+//  delay(1000); // Wait for the LOG to be ready
+//  testRTC();
+//  testSDCard();
+//  turnLogOFF(); // Turn the feather datalogger OFF, we will go to OVW and we don't need it
 
   currentState = STATE_OVERWATCH;
 
@@ -320,21 +160,10 @@ void setup()
 
   //waitForRS1DWarmUp();
 
-  // Preaparing the night watch (watchdog)
-  //-------------------------------------
-  // Remember to hold the door
-  #ifdef SERIAL_VERBOSE
-  Serial.print("Preparing watchdog, timeout is: ");
-  Serial.print(wdtTimeout);
-  Serial.println(" [s]");
-  #endif
-  timer = timerBegin(0, 80, true);                  //timer 0, div 80
-  timerAttachInterrupt(timer, &resetModule, true);  //attach callback
-  timerAlarmWrite(timer, wdtTimeout * S_TO_US_FACTOR, false); // set time is in [us]
-  // The ISR is enabled later (@ the end of the "set up") but timer has already started
-  #ifdef SERIAL_VERBOSE
-  Serial.println("Watchdog timer started, no ISR yet");
-  #endif
+  // Preaparing the watchdog
+  //------------------------
+  prepareWDT();
+  
 
 #ifdef SERIAL_VERBOSE
   Serial.println("And here, we, go, ...");
@@ -403,16 +232,26 @@ void loop()
 
             // Start the feather datalogger
             turnLogON();
-			      delay(50); // Wait 50ms for the feather to be ready
-			      // Start the GPS
-            turnGPSON(); // It will take 1.9s to get the 1st GPS message (no fix)
+			      //delay(50); // Wait 50ms for the feather to be ready
+			      
+			      #ifdef USE_GPS
+  			      // Start the GPS (it will take 1.9s to get the 1st GPS message (no fix))
+              turnGPSON();
+              // Set up the GPS so it is ready to be used for LOG (timestamps)
+              testGPS();
+              waitForGPSFix(); // This is blocking
+            #endif
 
-            // Create a new file
+            noFixGPS = false; //<DEBUG> <REMOVE ME>
+            
+            // if there was no GPS fix, we need to start and enable the RTC
+            if(noFixGPS)
+            {
+              testRTC();
+            }
 
-            // Set up the GPS so it is ready to be used for LOG (timestamps)
-            testGPS();
-            waitForGPSFix(); // This is blocking
-            // Create a new file
+            testSDCard();
+            // Create a new file (we do that here because we need to wait RTC/GPS for the timestamp)
             createNewFile();
           }
           else
@@ -546,7 +385,7 @@ void loop()
       {
         #ifdef SERIAL_VERBOSE
         Serial.println("Looks like we need to change the state");
-        Serial.println("Resetting some variables...");
+        Serial.print("Resetting some variables...");
         #endif
 
         nbr_bumpDetectedTotal   = 0;
@@ -555,7 +394,15 @@ void loop()
         cnt_Overwatch           = 0;
         cnt_Log                 = 0;
 
+        #ifdef SERIAL_VERBOSE
+        Serial.println("Done");
+        #endif
+
         currentState = nextState; // For next loop
+
+        #ifdef SERIAL_VERBOSE
+        Serial.println("Ready for the next state");
+        #endif
 
       }
       //      else
@@ -595,6 +442,8 @@ void pinSetUp (void)
 
   pinMode (LOG_PWR_PIN_1    , OUTPUT);
   pinMode (LOG_PWR_PIN_2    , OUTPUT);
+  pinMode (LOG_PWR_PIN_3    , OUTPUT);
+  pinMode (LOG_PWR_PIN_4    , OUTPUT);
 
   pinMode (GPS_BOOST_ENA_PIN    , OUTPUT);
 
@@ -623,7 +472,7 @@ void checkBatteryLevel (void)
     Serial.print(rawBattValue);
     Serial.println(" LSB");
 
-    Serial.printf("Voltage: %f [V]", battVoltage);
+    Serial.printf("Voltage: %f [V]\r\n", battVoltage);
 
     if (battVoltage < LOW_BATTERY_THRESHOLD) // check if the battery is low (i.e. below the threshold)
     {
@@ -678,6 +527,8 @@ void turnLogOFF(void) {
 
   digitalWrite(LOG_PWR_PIN_1, LOW);
   digitalWrite(LOG_PWR_PIN_2, LOW);
+  digitalWrite(LOG_PWR_PIN_3, LOW);
+  digitalWrite(LOG_PWR_PIN_4, LOW);
 
 #ifdef SERIAL_VERBOSE
   Serial.println("Log is OFF");
@@ -694,6 +545,8 @@ void turnLogON(void) {
 
   digitalWrite(LOG_PWR_PIN_1, HIGH);
   digitalWrite(LOG_PWR_PIN_2, HIGH);
+  digitalWrite(LOG_PWR_PIN_3, HIGH);
+  digitalWrite(LOG_PWR_PIN_4, HIGH);
 
 
 #ifdef SERIAL_VERBOSE
@@ -776,6 +629,9 @@ void logToSDCard(void) {
  
   dataString += FORMAT_SEP;
 
+  Serial.print("Filename: ");
+  Serial.println(fileName);
+
   // Write the accelerations in the message
   //------------------------------------------
   for (uint8_t cnt_Acc = 0; cnt_Acc < NBR_ACCELERATIONS_PER_MESSAGE; cnt_Acc++)
@@ -786,7 +642,7 @@ void logToSDCard(void) {
   }
 
 #ifdef SERIAL_VERBOSE
-  Serial.println("Data going to SD card: ");
+  Serial.print("Data going to SD card: ");
   Serial.println(dataString);
   Serial.flush();
 #endif
@@ -816,7 +672,7 @@ void logToSDCard(void) {
       // Limit back the frequency of the CPU to consume less power
       // setCpuFrequencyMhz(TARGET_CPU_FREQUENCY);
     }
-    else // wE ARE STILL UNDER THE LIMIT OF NUMBER OF LINES PER FILE
+    else // We are still under the limit of number of lines per file
     {
       dataFile.println(dataString);
       cntLinesInFile++; // Increment the lines-in-current-file counter
@@ -833,7 +689,7 @@ void logToSDCard(void) {
   // If the file isn't open, pop up an error
   else {
     #ifdef SERIAL_VERBOSE
-    Serial.print("Error writting to the file: ");
+    Serial.print("Error writting to the following file: ");
     Serial.println(fileName);
     #endif
     fileName = "";        // Reset the filename
@@ -1007,6 +863,7 @@ void testRTC(void) {
   // to be restarted by clearing the STOP bit. Let's do this to ensure
   // the RTC is running.
   rtc.start();
+  Serial.println("RTC is good to go...");
 
 }
 
@@ -1049,7 +906,7 @@ void testSDCard(void)
     #ifdef SERIAL_VERBOSE
     Serial.println("Card failed, or not present");
     #endif
-    blinkAnError(2);
+    blinkAnError(2); // This is going to get caught by the WDT
   }
 
 #ifdef SERIAL_VERBOSE
@@ -1071,11 +928,11 @@ void createNewFile(void) {
   fileName = "";                    // Reset the filename
   fileName += "/";                  // To tell it to put in the root folder, absolutely necessary
 
-if (noFixGPS) // Then use RTC
+  if (noFixGPS) // Then use RTC
   {
     // Read the RTC time
     //------------------------------------------
-     timestampForFileName = rtc.now(); // MUST be global!!!!! or it won't update
+    timestampForFileName = rtc.now(); // MUST be global!!!!! or it won't update
     char timeStamp[sizeof(timeStampFormat_FileName)]; // We are obliged to do that horror because the method "toString" input parameter is also the output
     strncpy(timeStamp, timeStampFormat_FileName, sizeof(timeStampFormat_FileName));
     fileName += timestampForFileName.toString(timeStamp);
@@ -1133,6 +990,24 @@ void changeCPUFrequency(void)
   Serial.println("----------------------------------------");
   #endif
 }
+
+//******************************************************************************************
+void prepareWDT(void)
+ {
+  // Remember to hold the door
+  #ifdef SERIAL_VERBOSE
+  Serial.print("Preparing watchdog, timeout is: ");
+  Serial.print(wdtTimeout);
+  Serial.println(" [s]");
+  #endif
+  timer = timerBegin(0, 80, true);                  //timer 0, div 80
+  timerAttachInterrupt(timer, &resetModule, true);  //attach callback
+  timerAlarmWrite(timer, wdtTimeout * S_TO_US_FACTOR, false); // set time is in [us]
+  // The ISR is enabled later (@ the end of the "set up") but timer has already started
+  #ifdef SERIAL_VERBOSE
+  Serial.println("Watchdog timer started, no ISR yet");
+  #endif
+ }
 
 //******************************************************************************************
 #ifdef USE_GPS
@@ -1206,16 +1081,14 @@ void waitForGPSFix(void)
   // -----------------
   while (noFixGPS && ((millis() - startedWaiting) <= GPS_NO_FIX_TIMEOUT_MS))
   {
-    
-
-        // < DEBUG > <REMOVE WHEN FINISHED>
-        cnt_whileLoop ++;
-      Serial.print((millis() - startedWaiting));
-      Serial.print(" < ");
-      Serial.print(GPS_NO_FIX_TIMEOUT_MS);
-      Serial.println(" ?");
-      Serial.printf("Looping %d\r\n", cnt_whileLoop);
-      Serial.printf("Still waiting for fix? %d\r\n", noFixGPS);
+//      // < DEBUG > <REMOVE WHEN FINISHED>
+//      cnt_whileLoop ++;
+//      Serial.print((millis() - startedWaiting));
+//      Serial.print(" < ");
+//      Serial.print(GPS_NO_FIX_TIMEOUT_MS);
+//      Serial.println(" ?");
+//      Serial.printf("Looping %d\r\n", cnt_whileLoop);
+//      Serial.printf("Still waiting for fix? %d\r\n", noFixGPS);
       
       // Reset the timer (i.e. feed the watchdog)
       //------------------------------------------
@@ -1255,7 +1128,7 @@ void waitForGPSFix(void)
   }
   
         #ifdef SERIAL_VERBOSE
-        Serial.println("Done waiting for GPS fix, is there a fix?...");
+        Serial.println("Done waiting for GPS fix: FIX or TIMEOUT?...");
         Serial.print("Fix: ");
         Serial.print((int)GPS.fix);
         Serial.print(" quality: ");
