@@ -114,7 +114,8 @@ const uint8_t   LOG_PWR_PIN_4               = 27;  // To turn the geophone ON an
    * using the RTC (also in RTC time but no  [ms])
    */
   bool            noFixGPS              = true;                 // Initialise to the worst case: no fix
-  const uint32_t  GPS_NO_FIX_TIMEOUT_MS = 1 * S_TO_MS_FACTOR;   // 10s
+  const uint32_t  GPS_NO_FIX_TIMEOUT_MS   = 5 * S_TO_MS_FACTOR;   // 10s
+  const uint32_t  GPS_NEW_FILE_TIMEOUT_MS = 2 * S_TO_MS_FACTOR;   // 2s
 #endif
 
 
@@ -160,10 +161,15 @@ File        dataFile;                               // Only 1 file can be opened
  */
 
 //RTC
-const uint8_t GPS_BOOST_ENA_PIN           = 21;      // To turn the BOOST converter of the GPS ON and OFF
 RTC_PCF8523         rtc;
 DateTime            time_loop;             // MUST be global!!!!! or it won't update
 DateTime            timestampForFileName;  // MUST be global!!!!! or it won't update
+
+// GPS
+const uint8_t GPS_BOOST_ENA_PIN     = 21;      // To turn the BOOST converter of the GPS ON and OFF
+bool          GPSNeeded             = false;  // Used in the mail loop to descide if the GPS I2C buffer should be depiled
+bool          GPSTimeAvailable      = false;  // Used in logging to know if we can use the lastest GPS timestamp string
+String        lastGPSTimestamp      = "";
 
 // -------------------------- Functions declaration --------------------------
 void      pinSetUp            (void);
@@ -193,6 +199,7 @@ uint32_t  hex2dec             (char * a);
 void      blinkAnError        (uint8_t errno);
 void      changeCPUFrequency  (void);           // Change the CPU frequency and report about it over serial
 void      prepareWDT          (void); // For the Timer and ISR
+void      getGPSTime          (void);
 
 
 // END OF FILE

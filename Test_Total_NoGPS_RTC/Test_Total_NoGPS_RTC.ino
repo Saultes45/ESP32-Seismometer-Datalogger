@@ -148,6 +148,8 @@ void setup()
 //  turnLogOFF(); // Turn the feather datalogger OFF, we will go to OVW and we don't need it
 
   currentState = STATE_OVERWATCH;
+  GPSNeeded = false;
+  goodMessageReceived_flag = false; // Reset the flag
 
   // Start the RS1D
   //----------------
@@ -190,6 +192,20 @@ void loop()
   
 
   readRS1DBuffer();
+
+  GPSTimeAvailable = false; // Reset the flag anyway
+
+  // Get GPS time if necessary (i.e. if we are in LOG) in order to empty the GPS buffer as often as possible
+  //----------------------------
+  #ifdef USE_GPS
+  if (GPSNeeded)
+  {   
+     getGPSTime();
+  }
+  #endif
+
+
+
 
   if (goodMessageReceived_flag)
   {
@@ -237,16 +253,18 @@ void loop()
 			      #ifdef USE_GPS
   			      // Start the GPS (it will take 1.9s to get the 1st GPS message (no fix))
               turnGPSON();
+              GPSNeeded = true; // for the nexts loops to know a GPS buffer reading is required
               // Set up the GPS so it is ready to be used for LOG (timestamps)
               testGPS();
               waitForGPSFix(); // This is blocking
             #endif
 
-            noFixGPS = false; //<DEBUG> <REMOVE ME>
+            //noFixGPS = false; //<DEBUG> <REMOVE ME>
             
             // if there was no GPS fix, we need to start and enable the RTC
             if(noFixGPS)
             {
+              GPSNeeded = false;
               testRTC();
             }
 
@@ -314,6 +332,7 @@ void loop()
 		  
           turnLogOFF(); // Stop the feather datalogger
           turnGPSOFF(); // Stop the GPS
+          GPSNeeded = false;
           // Leave the RS1D ON since we are going to overwatch
 
           #ifdef SERIAL_VERBOSE
@@ -384,7 +403,9 @@ void loop()
       if (nextState != currentState)
       {
         #ifdef SERIAL_VERBOSE
-        Serial.println("Looks like we need to change the state");
+        Serial.print("Looks like we need to change the state to: ");
+        Serial.print(nextState);
+        Serial.println(" (2 = SLEEP, 3 = OVW, 1 = LOG)");
         Serial.print("Resetting some variables...");
         #endif
 
@@ -409,7 +430,7 @@ void loop()
       //      {
       //        Serial.println("Just keep on looping");
       //      }
-    }/* [] END OF if SLEEP: */
+    }/* [] END OF "if" SLEEP: */
 
 
   } // END of goodMessageReceived_flag
@@ -622,6 +643,10 @@ void logToSDCard(void) {
   }
   else // Then use GPS
   {
+
+
+
+    
     dataString += "2011_11_11__11_11_11.100"; // <DEBUG>
   }
 
@@ -664,11 +689,17 @@ void logToSDCard(void) {
       dataFile.close();
       // Reset the line counter
       cntLinesInFile = 0;
+
+      /* The next commented out lines are removed since 1 LOG step = 1 file
       // Create a new file
       createNewFile();
+      
       #ifdef SERIAL_VERBOSE
       Serial.println("Reached the max number of lines per file, starting a new one");
       #endif
+      */
+
+      
       // Limit back the frequency of the CPU to consume less power
       // setCpuFrequencyMhz(TARGET_CPU_FREQUENCY);
     }
@@ -920,6 +951,10 @@ void testSDCard(void)
 
 //******************************************************************************************
 void createNewFile(void) {
+  
+  #ifdef SERIAL_VERBOSE
+  Serial.println("Creating a new file on SD");
+  #endif
 
   cntFile ++; // Increment the counter of files
 
@@ -928,8 +963,22 @@ void createNewFile(void) {
   fileName = "";                    // Reset the filename
   fileName += "/";                  // To tell it to put in the root folder, absolutely necessary
 
+  #ifdef SERIAL_VERBOSE
+  Serial.print("Current file name: ");
+  Serial.println(fileName);
+  #endif
+
+  #ifdef SERIAL_VERBOSE
+  Serial.print("Are we going to use the GPS or the RTC for the FILENAME?...");
+  #endif
+  
   if (noFixGPS) // Then use RTC
   {
+
+    #ifdef SERIAL_VERBOSE
+    Serial.println("RTC it is");
+    #endif
+    
     // Read the RTC time
     //------------------------------------------
     timestampForFileName = rtc.now(); // MUST be global!!!!! or it won't update
@@ -937,12 +986,106 @@ void createNewFile(void) {
     strncpy(timeStamp, timeStampFormat_FileName, sizeof(timeStampFormat_FileName));
     fileName += timestampForFileName.toString(timeStamp);
   }
-  else // Then use GPS
+  else // Then use GPS for the file name
   {
+
+    #ifdef SERIAL_VERBOSE
+    Serial.println("GPS it is");
+    #endif
+    
     // Read the GPS time
-    //------------------------------------------
-    fileName += "2011_11_11__11_11_11"; // <DEBUG>
+    //------------------
+    
+    // 2 securities: internal: timeout AND external: watchdog
+    unsigned long startedWaiting = millis();
+    unsigned int cnt_whileLoop = 0;
+    Serial.print((millis() - startedWaiting));
+    Serial.print(" < ");
+    Serial.print(GPS_NEW_FILE_TIMEOUT_MS);
+    Serial.println(" ?");
+    Serial.printf("Looping %d\r\n", cnt_whileLoop);
+  
+    // Big waiting loop
+    // -----------------
+    while (((millis() - startedWaiting) <= GPS_NEW_FILE_TIMEOUT_MS))
+    {
+      //      // < DEBUG > <REMOVE WHEN FINISHED>
+      //      cnt_whileLoop ++;
+      //      Serial.print((millis() - startedWaiting));
+      //      Serial.print(" < ");
+      //      Serial.print(GPS_NEW_FILE_TIMEOUT_MS);
+      //      Serial.println(" ?");
+      //      Serial.printf("Looping %d\r\n", cnt_whileLoop);
+      //      Serial.printf("Still waiting for fix? %d\r\n", noFixGPS);
+        
+      // Reset the timer (i.e. feed the watchdog)
+      //------------------------------------------
+      timerWrite(timer, 0); // need to be before a potential sleep
+        
+      // read data from the GPS in the 'main loop'
+      char c = GPS.read();
+    
+      // if a sentence is received, we can check the checksum, parse it...
+      if (GPS.newNMEAreceived()) 
+      {
+        // <REMOVED  CHECK>
+        //if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
+        //return; // we can fail to parse a sentence in which case we should just wait for another
+  
+        if(not(GPS.fix)) // Display stats and keep looping in the while loop
+        {
+          #ifdef SERIAL_VERBOSE
+          Serial.print("Still no fix, keep looping for: ");
+          Serial.print(GPS_NO_FIX_TIMEOUT_MS - (millis() - startedWaiting));
+          Serial.println(" [ms]");
+          Serial.print("Fix: ");
+          Serial.print((int)GPS.fix);
+          Serial.print(" quality: ");
+          Serial.println((int)GPS.fixquality);
+          #endif
+        }
+        else // We have a fix! Yay!
+        {
+           
+        // Read the GPS time
+        //-------------------
+        
+          fileName += String(2000 + GPS.year);
+          fileName += "_";
+          if (GPS.month < 10) { fileName += "0"; } 
+          fileName += String(GPS.month);
+          fileName += "_";
+          if (GPS.day < 10) { fileName += "0"; } 
+          fileName += String(GPS.day);
+          fileName += "__";
+          if (GPS.hour < 10) { fileName += "0"; } 
+          fileName += String(GPS.hour);
+          fileName += "_";
+          if (GPS.hour < 10) { fileName += "0"; } 
+          fileName += String(GPS.minute);
+          fileName += "_";
+          if (GPS.hour < 10) { fileName += "0"; } 
+          fileName += String(GPS.seconds);
+          fileName += ".";
+          fileName += String(GPS.milliseconds);
+  
+        }
+  
+        // Reset the timer (i.e. feed the watchdog)
+        //------------------------------------------
+        timerWrite(timer, 0); // need to be before a potential sleep
+      }
+    } // END OF WHILE
+
+    // TODO#1: if we have a GPS timeout here, we should revert back to the RTC. Add code
+
+    fileName += "2011_11_11__11_11_11"; // <DEBUG> <REMOVE ME>
   }
+
+  #ifdef SERIAL_VERBOSE
+  Serial.print("Current file name: ");
+  Serial.println(fileName);
+  #endif
   
   fileName += "-"; // Add a separator between datetime and filenumber
 
@@ -952,6 +1095,11 @@ void createNewFile(void) {
   fileName += String(buffer);
 
   fileName += ".txt"; // Add the file extension
+
+   #ifdef SERIAL_VERBOSE
+  Serial.print("Current file name: ");
+  Serial.println(fileName);
+  #endif
 
 
   if (SD.exists(fileName))
@@ -964,11 +1112,17 @@ void createNewFile(void) {
 
   // Open the file. Note that only one file can be open at a time,
   // so you have to close this one before opening another.
-#ifdef SERIAL_VERBOSE
+  #ifdef SERIAL_VERBOSE
   Serial.print("Creating the following file on the SD card: ");
   Serial.println(fileName);
-#endif
+  #endif
+  
   dataFile = SD.open(fileName, FILE_WRITE);
+
+   #ifdef SERIAL_VERBOSE
+  Serial.print("File name created successfully: ");
+  Serial.println(fileName);
+  #endif
 
 }
 
@@ -1015,7 +1169,7 @@ void testGPS(void)
 {
 
   #ifdef SERIAL_VERBOSE
-  Serial.println("Starting to adress the GPS...");
+  Serial.println("Starting to address the GPS...");
   #endif
   
   GPS.begin(0x10);  // The I2C address to use is 0x10
@@ -1134,8 +1288,78 @@ void waitForGPSFix(void)
         Serial.print(" quality: ");
         Serial.println((int)GPS.fixquality);
         #endif
+
+        if (noFixGPS)
+        {
+          // GPS cannot give us a fix so we turn it off and use the RTC
+          turnGPSOFF();
+        }
 }
 #endif
+
+
+//******************************************************************************************
+#ifdef USE_GPS
+void getGPSTime(void)
+{
+
+   lastGPSTimestamp = "";
+   
+
+  // read data from the GPS in the 'main loop'
+  char c = GPS.read();
+
+  // if a sentence is received, we can check the checksum, parse it...
+  if (GPS.newNMEAreceived()) 
+  {
+
+
+  if (GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
+  {
+    if(GPS.fix)
+    {
+    // Read the GPS time
+    //-------------------
+    
+    lastGPSTimestamp += String(2000 + GPS.year);
+    lastGPSTimestamp += "_";
+    if (GPS.month < 10) { lastGPSTimestamp += "0"; } 
+    lastGPSTimestamp += String(GPS.month);
+    lastGPSTimestamp += "_";
+    if (GPS.day < 10) { lastGPSTimestamp += "0"; } 
+    lastGPSTimestamp += String(GPS.day);
+    lastGPSTimestamp += "__";
+    if (GPS.hour < 10) { lastGPSTimestamp += "0"; } 
+    lastGPSTimestamp += String(GPS.hour);
+    lastGPSTimestamp += "_";
+    if (GPS.hour < 10) { lastGPSTimestamp += "0"; } 
+    lastGPSTimestamp += String(GPS.minute);
+    lastGPSTimestamp += "_";
+    if (GPS.hour < 10) { lastGPSTimestamp += "0"; } 
+    lastGPSTimestamp += String(GPS.seconds);
+    lastGPSTimestamp += ".";
+
+    // if (GPS.milliseconds < 10) 
+    // {
+    //   lastGPSTimestamp += "00";
+    // } 
+    // else if (GPS.milliseconds > 9 && GPS.milliseconds < 100) 
+    // {
+    //   lastGPSTimestamp += "0";
+    // }
+    lastGPSTimestamp += String(GPS.milliseconds);
+    GPSTimeAvailable = true; // Indicates we can use the lastGPSTimestamp
+
+      #ifdef SERIAL_VERBOSE
+      Serial.print("Timestamp: ");
+      Serial.println(lastGPSTimestamp);
+      #endif
+    }
+    }
+  }
+}  
+#endif
+
 
 
 // END OF SCRIPT
