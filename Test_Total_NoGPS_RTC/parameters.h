@@ -22,7 +22,16 @@
 *
 */
 
+// -------------------------- Conditional defines --------------------------
 
+#define SERIAL_VERBOSE // Comment out to remove message to the console (and save some exec time and power)
+#define USE_GPS        // Comment out to not use any code for the GPS (even the library)
+
+/* if you uncomment USE_GPS, you have to actually unconnect its SDA and SCL. 
+ *  Otherwise the RTC will not work
+ */
+
+// -------------------------- Includes --------------------------
 //ESP32
 #include <esp_system.h>
 #include <rom/rtc.h> // reset reason
@@ -47,7 +56,7 @@
 
 
 // Battery
-#define BATT_VOLTAGE_DIVIDER_FACTOR   2       // [N/A]
+#define BATT_VOLTAGE_DIVIDER_FACTOR   2.0       // [N/A]
 #define LOW_BATTERY_THRESHOLD         3.1     // in [V]
 #define BATT_PIN                      35      // To detect the Lipo battery remaining charge, GPIO35 on Adafruit ESP32 (35 on dev kit)
 
@@ -61,9 +70,9 @@
 #define STATE_EMPTY          (0u)
 #endif /* STATES_H */
 
-#define NBR_OVERWATCH_BEFORE_ACTION     10
+#define NBR_OVERWATCH_BEFORE_ACTION     20
 #define NBR_BUMPS_DETECTED_BEFORE_LOG   3
-#define NBR_LOG_BEFORE_ACTION           6
+#define NBR_LOG_BEFORE_ACTION           40
 #define TIME_TO_SLEEP                   10          // In [s], time spent in the deep sleep state
 #define S_TO_US_FACTOR                  1000000ULL  // Conversion factor from [s] to [us] for the deepsleep // Source: https://github.com/espressif/arduino-esp32/issues/3286
 #define S_TO_MS_FACTOR                  1000        // Conversion factor from [s] to [ms] for the delay
@@ -114,8 +123,8 @@ const uint8_t   LOG_PWR_PIN_4               = 27;  // To turn the geophone ON an
    * using the RTC (also in RTC time but no  [ms])
    */
   bool            noFixGPS              = true;                 // Initialise to the worst case: no fix
-  const uint32_t  GPS_NO_FIX_TIMEOUT_MS   = 5 * S_TO_MS_FACTOR;   // 10s
-  const uint32_t  GPS_NEW_FILE_TIMEOUT_MS = 2 * S_TO_MS_FACTOR;   // 2s
+  const uint32_t  GPS_NO_FIX_TIMEOUT_MS   = 5 * S_TO_MS_FACTOR;   // 
+  const uint32_t  GPS_NEW_FILE_TIMEOUT_MS = 2 * S_TO_MS_FACTOR;   // 
 #endif
 
 

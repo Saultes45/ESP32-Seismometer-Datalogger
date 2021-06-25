@@ -32,19 +32,9 @@
 *
 */
 
-// -------------------------- Conditional defines --------------------------
-
-#define SERIAL_VERBOSE // Comment out to remove message to the console (and save some exec time and power)
-#define USE_GPS        // Comment out to not use any code for the GPS (even the library)
-
 
 // -------------------------- Includes --------------------------
-
 #include "parameters.h"
-
-
-
-
 
 // -------------------------- ISR ----------------
 // Watchdog (IRAM_ATTR)
@@ -193,11 +183,14 @@ void loop()
 
   readRS1DBuffer();
 
-  GPSTimeAvailable = false; // Reset the flag anyway
+  
 
   // Get GPS time if necessary (i.e. if we are in LOG) in order to empty the GPS buffer as often as possible
   //----------------------------
   #ifdef USE_GPS
+
+  GPSTimeAvailable = false; // Reset the flag anyway
+  
   if (GPSNeeded)
   {   
      getGPSTime();
@@ -257,7 +250,7 @@ void loop()
               // Set up the GPS so it is ready to be used for LOG (timestamps)
               testGPS();
               waitForGPSFix(); // This is blocking
-            #endif
+           
 
             //noFixGPS = false; //<DEBUG> <REMOVE ME>
             
@@ -266,7 +259,14 @@ void loop()
             {
               GPSNeeded = false;
               testRTC();
+              //turnGPSOFF();
             }
+            #else
+            turnGPSON();// You have to turn it on otherwise the RTC I2C doesn't work
+            delay(5000);
+            testRTC();
+            turnGPSOFF();
+            #endif
 
             testSDCard();
             // Create a new file (we do that here because we need to wait RTC/GPS for the timestamp)
@@ -320,25 +320,50 @@ void loop()
         if (cnt_Log >= NBR_LOG_BEFORE_ACTION)
         {
           #ifdef SERIAL_VERBOSE
-          Serial.println("We reached our number of messages logged, let's overwatch (or log?)");
+          Serial.println("We reached our number of messages logged, OVW or LOG?");
           Serial.printf("We have detected %d bumps (or %d messages) during this log cycle of %d messages\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_LOG_BEFORE_ACTION);
           #endif
-          nextState = STATE_OVERWATCH;
-
-          // Close the file (even if the number of lines per file has not been reached)
-          dataFile.close();
-          // Reset the line counter
-          cntLinesInFile = 0;
-		  
-          turnLogOFF(); // Stop the feather datalogger
-          turnGPSOFF(); // Stop the GPS
-          GPSNeeded = false;
-          // Leave the RS1D ON since we are going to overwatch
 
           #ifdef SERIAL_VERBOSE
           Serial.println("Let's check the battery level, since we are at the end of the LOG");
           #endif
           checkBatteryLevel();
+          // The file has already been closed in the function logToSDCard
+          
+
+          if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
+          {
+            #ifdef SERIAL_VERBOSE
+            Serial.println("We reached our number of bumps goal, let's CONTINUE LOG");
+            #endif
+            nextState = STATE_LOG;
+
+            // We need to create a new file
+            createNewFile();
+
+            #ifdef SERIAL_VERBOSE
+            Serial.print("Resetting some variables...");
+            #endif
+    
+            nbr_bumpDetectedTotal   = 0;
+            nbr_bumpDetectedLast    = 0;
+            nbr_messagesWithBumps   = 0;
+            cnt_Overwatch           = 0;
+            cnt_Log                 = 0;
+    
+            #ifdef SERIAL_VERBOSE
+            Serial.println("Done");
+            #endif
+          }
+          else
+          {
+            nextState = STATE_OVERWATCH;
+  
+            turnLogOFF(); // Stop the feather datalogger
+            turnGPSOFF(); // Stop the GPS
+            GPSNeeded = false;
+            // Leave the RS1D ON since we are going to overwatch
+          }
         }
         else
         {
@@ -629,8 +654,21 @@ void logToSDCard(void) {
   //--------------------------------
   dataString += SOM_LOG;
 
+  #ifdef USE_GPS
+
+  #ifdef SERIAL_VERBOSE
+  Serial.print("Are we going to use the GPS or the RTC for the LOG?...");
+  #endif
+
+  //noFixGPS = false; //<DEBUG> <REMOVE ME>
+  
   if (noFixGPS) // Then use RTC
   {
+
+    #ifdef SERIAL_VERBOSE
+    Serial.println("RTC it is");
+    #endif
+    
      // Read the RTC time
     //------------------------------------------
     time_loop = rtc.now(); // MUST be global!!!!! or it won't update
@@ -643,12 +681,42 @@ void logToSDCard(void) {
   }
   else // Then use GPS
   {
+    #ifdef SERIAL_VERBOSE
+    Serial.println("GPS it is");
+    Serial.print("Is there any GPS messages that has been parsed?...");
+    #endif
 
-
-
-    
-    dataString += "2011_11_11__11_11_11.100"; // <DEBUG>
+    if (GPSTimeAvailable)
+    {
+      #ifdef SERIAL_VERBOSE
+      Serial.println("Yes there is");
+      #endif
+      dataString = lastGPSTimestamp;
+    }
+    else
+    {
+      #ifdef SERIAL_VERBOSE
+      Serial.println("Nope :(");
+      Serial.println("Using a random date");
+      #endif
+      dataString += "2011_11_11__11_11_11.100"; // <DEBUG>
+    }
+      // Reset the GPS messages: a GPS message can only be used once!
+      lastGPSTimestamp = "";
+      GPSTimeAvailable = false; 
   }
+  #else
+
+    // Read the RTC time
+    //------------------------------------------
+    time_loop = rtc.now(); // MUST be global!!!!! or it won't update
+    // We are obliged to do that horror because the method "toString" input parameter is also the output
+    char timeStamp[sizeof(timeStampFormat_Line)];
+    strncpy(timeStamp, timeStampFormat_Line, sizeof(timeStampFormat_Line));
+    dataString += time_loop.toString(timeStamp);
+    dataString += ".000"; // add the [ms] placeholder 
+
+  #endif
 
 
  
@@ -659,12 +727,14 @@ void logToSDCard(void) {
 
   // Write the accelerations in the message
   //------------------------------------------
-  for (uint8_t cnt_Acc = 0; cnt_Acc < NBR_ACCELERATIONS_PER_MESSAGE; cnt_Acc++)
+  for (uint8_t cnt_Acc = 0; cnt_Acc < NBR_ACCELERATIONS_PER_MESSAGE -1 ; cnt_Acc++)
   {
     // Save the results (acceleration is measured in ???)
     dataString += String(seismometerAcc[cnt_Acc]);
     dataString += FORMAT_SEP;
   }
+  // Write the last value of the accelerometer w/out a FORMAT_SEP
+  dataString += String(seismometerAcc[NBR_ACCELERATIONS_PER_MESSAGE-1]);
 
 #ifdef SERIAL_VERBOSE
   Serial.print("Data going to SD card: ");
@@ -683,8 +753,10 @@ void logToSDCard(void) {
     {
       // Boost the frequency of the CPU to the MAX so that the writing takes less time
       // setCpuFrequencyMhz(MAX_CPU_FREQUENCY);
-      // Write to the file w/out the "\r\n"
-      dataFile.print(dataString);
+      // Write last acceleration
+      dataFile.println(dataString);
+      // Write the battery voltage to the file w/out the "\r\n"
+      dataFile.print(String(analogRead(BATT_PIN) * (3.30 / 4095.00) * BATT_VOLTAGE_DIVIDER_FACTOR));
       // Close the file
       dataFile.close();
       // Reset the line counter
@@ -953,7 +1025,7 @@ void testSDCard(void)
 void createNewFile(void) {
   
   #ifdef SERIAL_VERBOSE
-  Serial.println("Creating a new file on SD");
+  Serial.println("Creating a new file on SD...");
   #endif
 
   cntFile ++; // Increment the counter of files
@@ -964,9 +1036,13 @@ void createNewFile(void) {
   fileName += "/";                  // To tell it to put in the root folder, absolutely necessary
 
   #ifdef SERIAL_VERBOSE
-  Serial.print("Current file name: ");
+  Serial.print("Starting to build a new file name: ");
   Serial.println(fileName);
   #endif
+
+
+
+  #ifdef USE_GPS
 
   #ifdef SERIAL_VERBOSE
   Serial.print("Are we going to use the GPS or the RTC for the FILENAME?...");
@@ -1075,17 +1151,26 @@ void createNewFile(void) {
         //------------------------------------------
         timerWrite(timer, 0); // need to be before a potential sleep
       }
-    } // END OF WHILE
+    } // END OF WHILE wait for GPS
 
     // TODO#1: if we have a GPS timeout here, we should revert back to the RTC. Add code
-
-    fileName += "2011_11_11__11_11_11"; // <DEBUG> <REMOVE ME>
+    fileName += "2011_11_11__11_11_11"; // <DEBUG> <PLACEHOLDER>
   }
+  #else
+    // Read the RTC time
+    //------------------
+    timestampForFileName = rtc.now(); // MUST be global!!!!! or it won't update
+    char timeStamp[sizeof(timeStampFormat_FileName)]; // We are obliged to do that horror because the method "toString" input parameter is also the output
+    strncpy(timeStamp, timeStampFormat_FileName, sizeof(timeStampFormat_FileName));
+    fileName += timestampForFileName.toString(timeStamp);
+  #endif
 
   #ifdef SERIAL_VERBOSE
   Serial.print("Current file name: ");
   Serial.println(fileName);
   #endif
+
+  
   
   fileName += "-"; // Add a separator between datetime and filenumber
 
