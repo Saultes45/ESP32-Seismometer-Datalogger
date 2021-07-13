@@ -251,7 +251,7 @@ void loop()
           if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
           {
             #ifdef SERIAL_VERBOSE
-            Serial.println("We reached our number-of-bumps goal, let's continue LOG!");
+            Serial.println("We reached our number-of-bumps goal, let's LOG!");
             #endif
             nextState = STATE_LOG;
 
