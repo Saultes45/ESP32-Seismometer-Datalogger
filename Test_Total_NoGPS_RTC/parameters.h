@@ -71,7 +71,7 @@
 #endif /* STATES_H */
 
 #define NBR_OVERWATCH_BEFORE_ACTION     20
-#define NBR_BUMPS_DETECTED_BEFORE_LOG   3
+#define NBR_BUMPS_DETECTED_BEFORE_LOG   16
 #define NBR_LOG_BEFORE_ACTION           40
 #define TIME_TO_SLEEP                   10          // In [s], time spent in the deep sleep state
 #define S_TO_US_FACTOR                  1000000ULL  // Conversion factor from [s] to [us] for the deepsleep // Source: https://github.com/espressif/arduino-esp32/issues/3286

@@ -69,6 +69,11 @@ unsigned int nbr_WDTTrig;
     ets_printf("Number of WDT triggers: %d / %d\r\n", nbr_WDTTrig, MAX_NBR_WDT);
   #endif
 
+turnRS1DOFF         ();
+turnLogOFF          ();
+turnGPSOFF          ();
+
+
   if (nbr_WDTTrig > MAX_NBR_WDT)
   {
     // Sleep instead of reboot
@@ -241,12 +246,12 @@ void loop()
 
             // Start the feather datalogger
             turnLogON();
-			      //delay(50); // Wait 50ms for the feather to be ready
+			      delay(1000); // Wait 50ms for the feather to be ready
 			      
 			      #ifdef USE_GPS
   			      // Start the GPS (it will take 1.9s to get the 1st GPS message (no fix))
               turnGPSON();
-              GPSNeeded = true; // for the nexts loops to know a GPS buffer reading is required
+              GPSNeeded = true; // for the next loops, to know that a GPS buffer reading is indeed required
               // Set up the GPS so it is ready to be used for LOG (timestamps)
               testGPS();
               waitForGPSFix(); // This is blocking
@@ -339,7 +344,7 @@ void loop()
           if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
           {
             #ifdef SERIAL_VERBOSE
-            Serial.println("We reached our number of bumps goal, let's CONTINUE LOG");
+            Serial.println("We reached our number-of-bumps goal, let's CONTINUE LOG");
             #endif
             nextState = STATE_LOG;
 
