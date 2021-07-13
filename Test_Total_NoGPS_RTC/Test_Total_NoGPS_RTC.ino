@@ -1073,6 +1073,8 @@ void createNewFile(void) {
 
   cntFile ++; // Increment the counter of files
 
+  timestampForFileName = ""; // Reset of this global variable
+
   // To name the file we need to know the date : ask the GPS or the RTC
   
   fileName = "";                    // Reset the filename
