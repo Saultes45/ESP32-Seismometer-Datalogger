@@ -1008,7 +1008,11 @@ void blinkAnError(uint8_t errno) {  // Use an on-board LED (the red one close to
 
   //errno argument tells how many blinks per period to do. Must be  strictly less than 10
 
-  while(1) { // Infinite loop: stay here until power cycle
+/* NOTICE: 
+ *  There should be ASOLUTELY NO watchdog feed in that function
+ */
+
+  while(1) { // Infinite loop: stay here until power cycle or watchdog
     uint8_t i;
 
     // This part is executed errno times, quick blink
