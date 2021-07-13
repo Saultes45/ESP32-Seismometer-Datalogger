@@ -66,9 +66,11 @@ unsigned int nbr_WDTTrig;
   #ifdef SERIAL_VERBOSE
     ets_printf("\r\n**** /!\\ Problem ! /!\\ ****\r\n");
     ets_printf("\r\nWatchdog trigger: reboot or sleep?\r\n");
-    ets_printf("Number of WDT triggers: %d / %d\r\n", nbr_WDTTrig, MAX_NBR_WDT);
+    //ets_printf("Number of WDT triggers: %d / %d\r\n", nbr_WDTTrig, MAX_NBR_WDT);
   #endif
 
+// normally since we go to sleep we shouldn't need that but 
+// there are some wierd slow discharge when we do not do the following
 turnRS1DOFF         ();
 turnLogOFF          ();
 turnGPSOFF          ();
