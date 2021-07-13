@@ -236,16 +236,18 @@ void loop()
         if (nbr_bumpDetectedLast > 0)
         {
           nbr_messagesWithBumps++;
+          nbr_bumpDetectedLast = 0; // RESET (redundant but security)
         }
 
         if (cnt_Overwatch >= NBR_OVERWATCH_BEFORE_ACTION)
         {
+          cnt_Overwatch = 0; // RESET (redundant but security)
           #ifdef SERIAL_VERBOSE
           Serial.println("End of the watch");
           Serial.printf("We have reached the desired number of overwatch cycles: %d over %d \r\n", cnt_Overwatch, NBR_OVERWATCH_BEFORE_ACTION);
           Serial.println("Time to make a descision: LOG or SLEEP?");
 
-          Serial.printf("We have detected %d bumps (or %d messages) over %d desired\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_BUMPS_DETECTED_BEFORE_LOG);
+          Serial.printf("We have detected %d bumps - %d desired (or %d messages)\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_BUMPS_DETECTED_BEFORE_LOG);
           #endif
 
           if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
@@ -253,11 +255,12 @@ void loop()
             #ifdef SERIAL_VERBOSE
             Serial.println("We reached our number-of-bumps goal, let's LOG!");
             #endif
+            nbr_bumpDetectedTotal = 0;// RESET (redundant but security)
             nextState = STATE_LOG;
 
             // Start the feather datalogger
             turnLogON();
-			      delay(1000); // Wait 50ms for the feather to be ready
+			      delay(1000); // Wait 1s for the feather to be ready // <DEBUG>
 			      
 			      #ifdef USE_GPS
   			      // Start the GPS (it will take 1.9s to get the 1st GPS message (no fix))
@@ -274,6 +277,7 @@ void loop()
             if(noFixGPS)
             {
               GPSNeeded = false;
+              GPSTimeAvailable = false;
               testRTC();
               //turnGPSOFF();
             }
@@ -683,7 +687,7 @@ void logToSDCard(void) {
   #ifdef USE_GPS
 
   #ifdef SERIAL_VERBOSE
-  Serial.print("Are we going to use the GPS or the RTC for the LOG?...");
+  Serial.print("Are we going to use the GPS or the RTC for the TIMESTAMP?...");
   #endif
 
   //noFixGPS = false; //<DEBUG> <REMOVE ME>
@@ -729,7 +733,7 @@ void logToSDCard(void) {
     }
       // Reset the GPS messages: a GPS message can only be used once!
       lastGPSTimestamp = "";
-      GPSTimeAvailable = false; 
+      GPSTimeAvailable = false; // <REDUNDANT with top of the loop>
   }
   #else
 
@@ -1323,11 +1327,17 @@ void testGPS(void)
 void waitForGPSFix(void)
 {
 
+  // Reset form global flags (probably not needed)
+  //GPSTimeAvailable = false;
+  //noFixGPS  = true; // Init // Already set lower in that function
+  // GPSNeeded is set if necessary outside this function
+  
+  
   #ifdef SERIAL_VERBOSE
   Serial.println("Starting to wait for GPS fix");
   Serial.print("Timeout is: ");
   Serial.print(GPS_NO_FIX_TIMEOUT_MS);
-  Serial.println(" [ms] or until watchdog trigger IF bloked");
+  Serial.println(" [ms] or until watchdog triggers IF stuck");
   #endif
   
 
