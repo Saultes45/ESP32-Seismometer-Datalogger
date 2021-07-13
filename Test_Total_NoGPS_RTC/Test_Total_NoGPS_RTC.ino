@@ -235,7 +235,7 @@ void loop()
           if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
           {
             #ifdef SERIAL_VERBOSE
-            Serial.println("We reached our number of bumps goal, let's LOG");
+            Serial.println("We reached our number-of-bumps goal, let's continue LOG!");
             #endif
             nextState = STATE_LOG;
 
@@ -319,16 +319,21 @@ void loop()
 
         if (cnt_Log >= NBR_LOG_BEFORE_ACTION)
         {
-          #ifdef SERIAL_VERBOSE
-          Serial.println("We reached our number of messages logged, OVW or LOG?");
-          Serial.printf("We have detected %d bumps (or %d messages) during this log cycle of %d messages\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_LOG_BEFORE_ACTION);
-          #endif
 
           #ifdef SERIAL_VERBOSE
           Serial.println("Let's check the battery level, since we are at the end of the LOG");
           #endif
           checkBatteryLevel();
           // The file has already been closed in the function logToSDCard
+          
+          #ifdef SERIAL_VERBOSE
+          Serial.println("End of the LOG");
+          Serial.printf("We have reached the desired number of LOG cycles: %d over %d \r\n", cnt_Log, NBR_LOG_BEFORE_ACTION);
+          Serial.println("Time to make a descision: OVW or continue LOG?");
+          Serial.printf("We have detected %d bumps (or %d messages) during this log cycle of %d messages\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_LOG_BEFORE_ACTION);
+          #endif
+
+          
           
 
           if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
@@ -808,6 +813,8 @@ void readRS1DBuffer(void)
   // const uint16_t  max_nbr_depiledChar = 500; // scope controlled  + cannot be reassigned
   uint16_t  cnt_savedMessage = 0;
 
+  nbr_bumpDetectedLast = 0; //RESET
+
   if (GeophoneSerial.available())
   {
     if(GeophoneSerial.find("[\""))// test the received buffer for SOM_CHAR_SR
@@ -859,7 +866,7 @@ void parseGeophoneData(void)
       seismometerAcc[cnt_fill] = (int32_t)0;
     }
 
-    // Parse the aquited message to get 1st acceleration (1st is different)
+    // Parse the aquired message to get 1st acceleration (1st is different)
     //----------------------------------------------------------------------
     p = strchr(p, '[')+1;
     p++; // Avoid the "
