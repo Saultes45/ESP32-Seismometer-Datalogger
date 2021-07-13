@@ -128,6 +128,15 @@ void setup()
   pinSetUp();
 
 
+  // Check battery level
+  // --------------------
+   #ifdef SERIAL_VERBOSE
+  Serial.println("Let's check the battery level, since we are boot");
+  #endif
+  checkBatteryLevel();
+  // The file has already been closed in the function logToSDCard
+
+
   // Variable reset
   // --------------
   for (uint8_t cnt_fill=0; cnt_fill < 50; cnt_fill++)
@@ -442,7 +451,7 @@ void loop()
         #ifdef SERIAL_VERBOSE
         Serial.print("Looks like we need to change the state to: ");
         Serial.print(nextState);
-        Serial.println(" (2 = SLEEP, 3 = OVW, 1 = LOG)");
+        Serial.println(" (1 = LOG, 2 = SLEEP, 3 = OVW)");
         Serial.print("Resetting some variables...");
         #endif
 
@@ -531,19 +540,24 @@ void checkBatteryLevel (void)
     Serial.println(" LSB");
 
     Serial.printf("Voltage: %f [V]\r\n", battVoltage);
+    #endif
 
     if (battVoltage < LOW_BATTERY_THRESHOLD) // check if the battery is low (i.e. below the threshold)
     {
+      #ifdef SERIAL_VERBOSE
       Serial.println("Warning: Low battery!");
+      #endif
+      // Force the board to sleep by triggering an error by 
+      //   using the blocking function: blinkAnError
+      blinkAnError(1);
     }
     else
     {
+      #ifdef SERIAL_VERBOSE
       Serial.println("Battery level OK");
+      Serial.println("----------------------------------------");
+      #endif
     }
-
-    Serial.println("----------------------------------------");
-  #endif
-
 }
 
 //******************************************************************************************
