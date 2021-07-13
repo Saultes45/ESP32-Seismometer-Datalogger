@@ -1055,6 +1055,17 @@ void testSDCard(void)
 
 //******************************************************************************************
 void createNewFile(void) {
+
+  /* NOTICE: 
+      Normally, this variable should be LOCAL: timestampForFileName
+      However, MUST be global!!!!! or it won't update
+
+      List of global variable modified:
+      -cntFile
+      -fileName
+      -timestampForFileName
+      -dataFile
+  */
   
   #ifdef SERIAL_VERBOSE
   Serial.println("Creating a new file on SD...");
