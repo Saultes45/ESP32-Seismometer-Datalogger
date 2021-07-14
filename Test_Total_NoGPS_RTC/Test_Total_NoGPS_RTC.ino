@@ -46,7 +46,13 @@ unsigned int nbr_WDTTrig;
   // Stop the timer
   //----------------
   //  timer(hw_timer_disarm());
-  timerAlarmDisable(timer); // You need to be careful of the order: 1st disable the IST, 2nd stop the timer
+
+  /* You need to be careful of the order: 
+   *  1st disable the ISR, 
+   *  2nd stop the timer 
+  */
+  
+  timerAlarmDisable(timer); 
   timerEnd(timer);
   timer = NULL;
   
@@ -127,16 +133,6 @@ void setup()
   // -------------
   pinSetUp();
 
-
-  // Check battery level
-  // --------------------
-   #ifdef SERIAL_VERBOSE
-  Serial.println("Let's check the battery level, since we are boot");
-  #endif
-  checkBatteryLevel();
-  // The file has already been closed in the function logToSDCard
-
-
   // Variable reset
   // --------------
   for (uint8_t cnt_fill=0; cnt_fill < 50; cnt_fill++)
@@ -171,22 +167,24 @@ void setup()
   // Preaparing the watchdog
   //------------------------
   prepareWDT();
-  
-
-#ifdef SERIAL_VERBOSE
-  Serial.println("And here, we, go, ...");
-  // Do not go gentle into that good night
-#endif
 
   // Enable all ISRs
   //----------------
   #ifdef SERIAL_VERBOSE
-  Serial.println("Watchdog ISR ready");
+  Serial.println("Watchdog ISR ready - this is the END of the setup");
   #endif
   timerAlarmEnable(timer);     // Watchdog
 
   //delay(wdtTimeout * S_TO_MS_FACTOR); // DEBUG: trigger watchdog at every loop
   //delay(wdtTimeout * S_TO_MS_FACTOR); // DEBUG: trigger watchdog at every loop
+
+  // Check battery level
+  // --------------------
+   #ifdef SERIAL_VERBOSE
+  Serial.println("Let's check the battery level, since we are boot");
+  #endif
+  checkBatteryLevel();
+  // The file has already been closed in the function logToSDCard
 
 
 }
@@ -195,7 +193,6 @@ void setup()
 // -------------------------- Loop --------------------------
 void loop() 
 {
-  
 
   readRS1DBuffer();
 
@@ -241,13 +238,15 @@ void loop()
 
         if (cnt_Overwatch >= NBR_OVERWATCH_BEFORE_ACTION)
         {
-          cnt_Overwatch = 0; // RESET (redundant but security)
+          cnt_Overwatch = 0; // RESET (redundant but security) <DEBUG>
+          fileName = "";    // Reset the filename // RESET (redundant but security) <DEBUG>
+          
           #ifdef SERIAL_VERBOSE
           Serial.println("End of the watch");
           Serial.printf("We have reached the desired number of overwatch cycles: %d over %d \r\n", cnt_Overwatch, NBR_OVERWATCH_BEFORE_ACTION);
           Serial.println("Time to make a descision: LOG or SLEEP?");
 
-          Serial.printf("We have detected %d bumps - %d desired (or %d messages)\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_BUMPS_DETECTED_BEFORE_LOG);
+          Serial.printf("We have detected %d bumps (or %d messages) - %d desired\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_BUMPS_DETECTED_BEFORE_LOG);
           #endif
 
           if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
@@ -340,6 +339,10 @@ void loop()
         if (cnt_Log >= NBR_LOG_BEFORE_ACTION)
         {
 
+          cnt_Log = 0; // RESET (redundant but security) <DEBUG>
+          fileName = "";    // Reset the filename // RESET (redundant but security) <DEBUG>
+          dataFile.close();// RESET (redundant but security) <DEBUG>
+
           #ifdef SERIAL_VERBOSE
           Serial.println("Let's check the battery level, since we are at the end of the LOG");
           #endif
@@ -358,6 +361,7 @@ void loop()
 
           if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
           {
+            
             #ifdef SERIAL_VERBOSE
             Serial.println("We reached our number-of-bumps goal, let's CONTINUE LOG");
             #endif
@@ -550,10 +554,13 @@ void checkBatteryLevel (void)
     {
       #ifdef SERIAL_VERBOSE
       Serial.println("Warning: Low battery!");
+      Serial.println("Going to sleep");
       #endif
+      
       // Force the board to sleep by triggering an error by 
       //   using the blocking function: blinkAnError
-      blinkAnError(1);
+      
+      //blinkAnError(1); // <DEBUG> <UNCOMMENT>
     }
     else
     {
@@ -675,6 +682,8 @@ void waitForRS1DWarmUp(void) {
 //******************************************************************************************
 void logToSDCard(void) {
 
+  bool errorOpeningFile = true; 
+
   // Create a string for assembling the data to log
   //-----------------------------------------------
   String dataString  = "";
@@ -776,7 +785,60 @@ void logToSDCard(void) {
   //------------------------
 
   // Check if the file is available
-  if (dataFile)
+  if  (dataFile)
+  {
+    // Everything is awesome!
+    errorOpeningFile = false;
+  }
+  else // problem opening the file on the 1st try
+  {
+    // If the file isn't open, pop up an error
+    #ifdef SERIAL_VERBOSE
+    Serial.print("Error writting to the following file: ");
+    Serial.println(fileName);
+    Serial.print("Trying again...");
+    #endif
+
+    if (dataFile)
+    {
+      errorOpeningFile = false;
+      #ifdef SERIAL_VERBOSE
+      Serial.println("Problem fixed on the 2nd try");
+      #endif
+    }
+    else // problem opening the file on the 2nd try
+    {
+      #ifdef SERIAL_VERBOSE
+      Serial.println("File problem persistant");
+      Serial.print("Trying to close and re-open...");
+      #endif
+
+      dataFile.close();
+      delay(1);
+      dataFile = SD.open(fileName, FILE_WRITE);
+
+      if (dataFile)
+      {
+        errorOpeningFile = false;
+        #ifdef SERIAL_VERBOSE
+        Serial.println("Problem fixed on open-close");
+        #endif
+      }
+      else // problem opening the file after open-close
+      {
+        #ifdef SERIAL_VERBOSE
+        Serial.println("File problem persistant");
+        #endif
+
+        // Resetting some global variables
+        //fileName = "";        // Reset the filename
+        //cntLinesInFile = 0;   // Reset the lines-in-current-file counter
+      }
+    }
+  }
+    
+
+  if (not(errorOpeningFile)) 
   {
     // We do it like this because of the "\r\n" not desired at the end of a file
     if (cntLinesInFile >= MAX_LINES_PER_FILES - 1) // Check if we have reached the max. number of lines per file
@@ -819,15 +881,7 @@ void logToSDCard(void) {
       #endif
     }
   }
-  // If the file isn't open, pop up an error
-  else {
-    #ifdef SERIAL_VERBOSE
-    Serial.print("Error writting to the following file: ");
-    Serial.println(fileName);
-    #endif
-    fileName = "";        // Reset the filename
-    cntLinesInFile = 0;   // Reset the lines-in-current-file counter
-  }
+
 
 }
 
@@ -1075,6 +1129,13 @@ void createNewFile(void) {
   Serial.println("Creating a new file on SD...");
   #endif
 
+  #ifdef SERIAL_VERBOSE
+  Serial.print("Making sure the previous file is closed...");
+  dataFile.close();
+  Serial.println("Done");
+  #endif// <DEBUG> <REMOVE ME> <DIDNT CHANGE  A THING>
+
+  
   cntFile ++; // Increment the counter of files
 
   timestampForFileName = ""; // Reset of this global variable

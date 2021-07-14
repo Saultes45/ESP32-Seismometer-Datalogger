@@ -57,7 +57,7 @@
 
 // Battery
 #define BATT_VOLTAGE_DIVIDER_FACTOR   2.0       // [N/A]
-#define LOW_BATTERY_THRESHOLD         3.1     // in [V]
+#define LOW_BATTERY_THRESHOLD         3.1     // in [V] // <DEBUG> actual value should read 3.1
 #define BATT_PIN                      35      // To detect the Lipo battery remaining charge, GPIO35 on Adafruit ESP32 (35 on dev kit)
 
 
@@ -95,7 +95,7 @@ const uint8_t       RS1D_PWR_PIN_1                    =  14;     // To turn the 
 
 // WATCHDOG
 hw_timer_t *    timer           = NULL;
-const uint8_t   wdtTimeout      = 3;    // WDT timeout in [s]
+const uint8_t   wdtTimeout      = 4;    // WDT timeout in [s]
 const uint8_t   MAX_NBR_WDT     = 10;   // Recurring WDT threshold on counter
 const int       WDT_SLP_RECUR_S = 1800; // Time to sleep if WDT triggers more than the threshold //Be careful for the type as the esprintf doesn't like some of them
 
@@ -123,7 +123,7 @@ const uint8_t   LOG_PWR_PIN_4               = 27;  // To turn the geophone ON an
    * using the RTC (also in RTC time but no  [ms])
    */
   bool            noFixGPS              = true;                 // Initialise to the worst case: no fix
-  const uint32_t  GPS_NO_FIX_TIMEOUT_MS   = 5 * S_TO_MS_FACTOR;   // 
+  const uint32_t  GPS_NO_FIX_TIMEOUT_MS   = 10 * S_TO_MS_FACTOR;   // 
   const uint32_t  GPS_NEW_FILE_TIMEOUT_MS = 2 * S_TO_MS_FACTOR;   // 
 #endif
 
