@@ -32,11 +32,11 @@
 // STATE MACHINE
 #ifndef STATES_H
 
-  #define STATES_H
-  #define STATE_OVERWATCH      (3u)
-  #define STATE_SLEEP          (2u)
-  #define STATE_LOG            (1u)
-  #define STATE_EMPTY          (0u)
+#define STATES_H
+#define STATE_OVERWATCH      (3u)
+#define STATE_SLEEP          (2u)
+#define STATE_LOG            (1u)
+#define STATE_EMPTY          (0u)
 
 #endif /* STATES_H */
 
@@ -60,10 +60,10 @@ const int32_t BUMP_THRESHOLD_NEG =      -100000;
 // State Machine
 volatile  uint8_t     currentState            = STATE_EMPTY;  // Used to store which step we are at, default is state "empty"
 volatile  uint8_t     nextState               = STATE_EMPTY;  // Used to store which step we are going to do next, default is state "empty"
-          uint8_t     cnt_Overwatch           = 0;            // This does NOT need to survive reboots NOR ISR, just global
-          uint8_t     cnt_Log                 = 0;            // This does NOT need to survive reboots NOR ISR, just global
-          uint16_t    nbr_bumpDetectedTotal   = 0;            // <KEEP GLOBAL>, max of 50*nbr overwatch
-          uint8_t     nbr_messagesWithBumps   = 0;            // <KEEP GLOBAL>, max of nbr overwatch
+uint8_t     cnt_Overwatch           = 0;            // This does NOT need to survive reboots NOR ISR, just global
+uint8_t     cnt_Log                 = 0;            // This does NOT need to survive reboots NOR ISR, just global
+uint16_t    nbr_bumpDetectedTotal   = 0;            // <KEEP GLOBAL>, max of 50*nbr overwatch
+uint8_t     nbr_messagesWithBumps   = 0;            // <KEEP GLOBAL>, max of nbr overwatch
 
 
 // END OF THE FILE
