@@ -47,14 +47,7 @@
 #define MAX_CPU_FREQUENCY             240
 #define TARGET_CPU_FREQUENCY          40
 
-// STATE MACHINE
-#ifndef STATES_H
-#define STATES_H
-#define STATE_OVERWATCH      (3u)
-#define STATE_SLEEP          (2u)
-#define STATE_LOG            (1u)
-#define STATE_EMPTY          (0u)
-#endif /* STATES_H */
+
 
 #define NBR_OVERWATCH_BEFORE_ACTION     50
 #define NBR_BUMPS_DETECTED_BEFORE_LOG   100

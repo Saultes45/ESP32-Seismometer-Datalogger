@@ -32,6 +32,8 @@
 // Personal libraries
 //--------------------
 #include "RS1D.h"
+#include "Battery.h"
+#include "StateMachine.h"
 
 
 //ESP32
