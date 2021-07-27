@@ -53,21 +53,6 @@
 // RTC
 #include <RTClib.h> // use the one from Adafruit, not the forks with the same name
 
-
-// Personal libraries
-//--------------------
-#include "RS1D.h"
-#include "Battery.h"
-#include "StateMachine.h"
-
-#include "SD_personal.h"
-
-#ifdef USE_GPS
-#include "GPS_personal.h"
-#endif
-
-
-
 // -------------------------- Defines and Const --------------------------
 
 // Console
@@ -77,12 +62,43 @@ const int CONSOLE_BAUD_RATE = 115200;
 #define MAX_CPU_FREQUENCY             240
 #define TARGET_CPU_FREQUENCY          40
 
+// Time conversion
+#define S_TO_US_FACTOR                  1000000ULL  // Conversion factor from [s] to [us] for the deepsleep // Source: https://github.com/espressif/arduino-esp32/issues/3286
+#define S_TO_MS_FACTOR                  1000        // Conversion factor from [s] to [ms] for the delay
+
+// -------------------------- Personal libraries --------------------------
+
+#include "Battery.h"
+#include "RS1D.h"
+
+#include "StateMachine.h"
+#include "RTC.h"
+
+#include "SD_personal.h"
+#include "Watchdog.h"
+
+#ifdef USE_GPS
+#include "GPS_personal.h"
+#endif
 
 
 // -------------------------- Global Variables --------------------------
 
+// -------------------------- Defines --------------------------
+// General
 
 
+// -------------------------- Functions declaration [22]--------------------------
+
+void      pinSetUp            (void);
+void      checkBatteryLevel   (void);
+void      resetSeismometerData(void);
+
+
+void      turnRS1DOFF         (void);
+void      turnRS1DON          (void);
+
+<<<<<<< Updated upstream
 // WATCHDOG
 //DateTime lastWatchdogTrigger;     // <NOT YET USED>
 //volatile uint32_t nbr_WatchdogTrigger = 0;
@@ -96,13 +112,34 @@ const int CONSOLE_BAUD_RATE = 115200;
 * set to zero when the ESP32 first powers up but will
 * retain its value after a deep sleep.
 */
+=======
+void      turnLogOFF          (void);
+void      turnLogON           (void);
+>>>>>>> Stashed changes
+
+void      turnGPSOFF          (void);
+void      turnGPSON           (void);
+
+void      waitForRS1DWarmUp   (void);
+void      testRTC             (void);
+void      logToSDCard         (void);
+void      readRS1DBuffer      (void);
+void      parseGeophoneData   (void);
+void      createNewFile       (void);
+void      testSDCard          (void);
+#ifdef USE_GPS
+void      testGPS             (void);
+void      waitForGPSFix       (void);
+#endif
+uint32_t  hex2dec             (char * a);
+void      blinkAnError        (uint8_t errno);
+void      changeCPUFrequency  (void);           // Change the CPU frequency and report about it over serial
+void      prepareWDT          (void); // For the Timer and ISR
+void      getGPSTime          (void);
+
+void      prepareSleep        (void);
 
 
-
-
-
-// -------------------------- Defines --------------------------
-// General
 
 // -------------------------- ISR [1]----------------
 //******************************************************************************************
@@ -110,6 +147,7 @@ const int CONSOLE_BAUD_RATE = 115200;
 void  resetModule()
 {
 
+<<<<<<< Updated upstream
 	unsigned int nbr_WDTTrig;
 
 	// Stop the timer
@@ -184,44 +222,85 @@ void  resetModule()
 		ets_printf("You shouldn't see this message\r\n");
 		#endif
 	}
+=======
+  unsigned int nbr_WDTTrig;
+  
+  // Stop the timer
+  //----------------
+  //  timer(hw_timer_disarm());
+
+  /* You need to be careful of the order: 
+   *  1st disable the ISR, 
+   *  2nd stop the timer 
+  */
+  
+  timerAlarmDisable(timer); 
+  timerEnd(timer);
+  timer = NULL;
+  
+  // Disable/Detach interrupts
+  //--------------------------
+  //detachInterrupt(interrupt);
+  noInterrupts();
+
+  //lastWatchdogTrigger = rtc.now(); // <NOT YET USED>
+
+  //nbr_WDTTrig = 12; // <DEBUG> <REMOVE ASAP>
+  nbr_WDTTrig = MAX_NBR_WDT; // To make sure the module chooses to sleep
+
+
+  nbr_WDTTrig++;
+
+  #ifdef SERIAL_VERBOSE
+    ets_printf("\r\n**** /!\\ Problem ! /!\\ ****\r\n");
+    ets_printf("\r\nWatchdog trigger: reboot or sleep?\r\n");
+    //ets_printf("Number of WDT triggers: %d / %d\r\n", nbr_WDTTrig, MAX_NBR_WDT);
+  #endif
+
+  // normally, since we go to sleep, we shouldn't need that but 
+  // there are some wierd slow discharge when we do not do the following
+  turnRS1DOFF         ();
+  turnLogOFF          ();
+  turnGPSOFF          ();
+
+
+  if (nbr_WDTTrig > MAX_NBR_WDT)
+  {
+    // Sleep instead of reboot
+
+    int watchdog_recurrent_time_in_s = WDT_SLP_RECUR_S;
+    
+    #ifdef SERIAL_VERBOSE
+      ets_printf("Sleeping for %d s...\r\n", watchdog_recurrent_time_in_s);
+    #endif
+
+    // Prepare the sleep with all the required parameters
+    esp_err_t err = esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH,ESP_PD_OPTION_OFF);
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_SLOW_MEM,ESP_PD_OPTION_OFF);
+    esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_FAST_MEM,ESP_PD_OPTION_OFF);
+    // Serial.println("Error = " + String(err)); // Tell the console the error status
+    esp_sleep_enable_timer_wakeup(watchdog_recurrent_time_in_s * S_TO_US_FACTOR); // Set up deep sleep wakeup timer
+
+
+    // Start the deep sleep
+    esp_deep_sleep_start();
+  }
+  else
+  {
+    #ifdef SERIAL_VERBOSE
+      ets_printf("Rebooting...\r\n");
+    #endif
+
+    esp_restart();
+
+    #ifdef SERIAL_VERBOSE
+      ets_printf("You shouldn't see this message\r\n");
+    #endif
+  }
+>>>>>>> Stashed changes
 }
 
 
-
-// -------------------------- Functions declaration [22]--------------------------
-
-void      pinSetUp            (void);
-void      checkBatteryLevel   (void);
-void      resetSeismometerData(void);
-
-
-void      turnRS1DOFF         (void);
-void      turnRS1DON          (void);
-
-void      turnLogOFF          (void);
-void      turnLogON           (void);
-
-void      turnGPSOFF          (void);
-void      turnGPSON           (void);
-
-void      waitForRS1DWarmUp   (void);
-void      testRTC             (void);
-void      logToSDCard         (void);
-void      readRS1DBuffer      (void);
-void      parseGeophoneData   (void);
-void      createNewFile       (void);
-void      testSDCard          (void);
-#ifdef USE_GPS
-void      testGPS             (void);
-void      waitForGPSFix       (void);
-#endif
-uint32_t  hex2dec             (char * a);
-void      blinkAnError        (uint8_t errno);
-void      changeCPUFrequency  (void);           // Change the CPU frequency and report about it over serial
-void      prepareWDT          (void); // For the Timer and ISR
-void      getGPSTime          (void);
-
-void      prepareSleep        (void);
 
 
 // -------------------------- Functions declaration [22]--------------------------
