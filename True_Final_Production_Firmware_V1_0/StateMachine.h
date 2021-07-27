@@ -46,8 +46,6 @@
 #define NBR_BUMPS_DETECTED_BEFORE_LOG   16
 #define NBR_LOG_BEFORE_ACTION           40
 #define TIME_TO_SLEEP                   10          // In [s], time spent in the deep sleep state
-#define S_TO_US_FACTOR                  1000000ULL  // Conversion factor from [s] to [us] for the deepsleep // Source: https://github.com/espressif/arduino-esp32/issues/3286
-#define S_TO_MS_FACTOR                  1000        // Conversion factor from [s] to [ms] for the delay
 
 // Bump detection
 const int32_t BUMP_THRESHOLD_POS =      +100000;
