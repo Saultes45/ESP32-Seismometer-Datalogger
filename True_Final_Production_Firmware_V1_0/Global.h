@@ -94,28 +94,11 @@ void      pinSetUp            (void);
 void      checkBatteryLevel   (void);
 void      resetSeismometerData(void);
 
-
 void      turnRS1DOFF         (void);
 void      turnRS1DON          (void);
 
-<<<<<<< Updated upstream
-// WATCHDOG
-//DateTime lastWatchdogTrigger;     // <NOT YET USED>
-//volatile uint32_t nbr_WatchdogTrigger = 0;
-//RTC_DATA_ATTR unsigned long nbr_WatchdogTrigger =0;
-/*
-* The attribute RTC_DATA_ATTR tells the compiler that
-* the variable should be stored in the real
-* time clock data area. This is a small area of
-* storage in the ESP32 processor that is part of
-* the Real Time Clock. This means that the value will be
-* set to zero when the ESP32 first powers up but will
-* retain its value after a deep sleep.
-*/
-=======
 void      turnLogOFF          (void);
 void      turnLogON           (void);
->>>>>>> Stashed changes
 
 void      turnGPSOFF          (void);
 void      turnGPSON           (void);
@@ -127,18 +110,16 @@ void      readRS1DBuffer      (void);
 void      parseGeophoneData   (void);
 void      createNewFile       (void);
 void      testSDCard          (void);
-#ifdef USE_GPS
-void      testGPS             (void);
-void      waitForGPSFix       (void);
-#endif
 uint32_t  hex2dec             (char * a);
 void      blinkAnError        (uint8_t errno);
 void      changeCPUFrequency  (void);           // Change the CPU frequency and report about it over serial
 void      prepareWDT          (void); // For the Timer and ISR
 void      getGPSTime          (void);
-
 void      prepareSleep        (void);
-
+#ifdef USE_GPS
+  void      testGPS             (void);
+  void      waitForGPSFix       (void);
+#endif
 
 
 // -------------------------- ISR [1]----------------
@@ -146,8 +127,6 @@ void      prepareSleep        (void);
 // Watchdog (IRAM_ATTR)
 void  resetModule()
 {
-
-<<<<<<< Updated upstream
 	unsigned int nbr_WDTTrig;
 
 	// Stop the timer
@@ -222,9 +201,7 @@ void  resetModule()
 		ets_printf("You shouldn't see this message\r\n");
 		#endif
 	}
-=======
-  unsigned int nbr_WDTTrig;
-  
+
   // Stop the timer
   //----------------
   //  timer(hw_timer_disarm());
@@ -297,7 +274,6 @@ void  resetModule()
       ets_printf("You shouldn't see this message\r\n");
     #endif
   }
->>>>>>> Stashed changes
 }
 
 
@@ -576,6 +552,15 @@ void logToSDCard(void) {
 
 	// Write the accelerations in the message
 	//------------------------------------------
+
+  // &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+  // Work on this section: 
+  // https://stackoverflow.com/questions/14344130/convert-char-array-to-string-use-c
+
+  // Copy the first x characters out of array to string
+  // memcpy(string, array, x);
+  // string[x] = '\0'; 
+
 	for (uint8_t cnt_Acc = 0; cnt_Acc < NBR_ACCELERATIONS_PER_MESSAGE -1 ; cnt_Acc++)
 	{
 		// Save the results (acceleration is measured in ???)
@@ -584,11 +569,12 @@ void logToSDCard(void) {
 	}
 	// Write the last value of the accelerometer w/out a FORMAT_SEP
 	dataString += String(seismometerAcc[NBR_ACCELERATIONS_PER_MESSAGE-1]);
+  // &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 
 #ifdef SERIAL_VERBOSE
 	Serial.print("Data going to SD card: ");
 	Serial.println(dataString);
-	Serial.flush();
+	// Serial.flush(); // Takes about 4.5x longer 
 #endif
 
 	// Log data in the SD card
@@ -1375,13 +1361,36 @@ void getGPSTime(void)
 //******************************************************************************************
 void resetSeismometerData (void)
 {
-	
-	for (uint8_t cnt_fill=0; cnt_fill < 50; cnt_fill++)
-	{
-		seismometerAcc[cnt_fill] = (int32_t)0;
-	}
 
-	memeset(seismometerAcc, (int32_t)0, 50);
+  /*
+   This function is called 
+      --> during the set up
+  */
+	
+  Serial.println("Reseting the seismometer data array now");
+
+  Serial.println("Current seismometer data in the array: ");
+  for (uint8_t cnt_fill=0; cnt_fill < NBR_ACCELERATIONS_PER_MESSAGE - 1; cnt_fill++)
+	{
+		Serial.printf("%ld, ", seismometerAcc[cnt_fill]);
+	}
+  Serial.printf("%ld\r\n", seismometerAcc[NBR_ACCELERATIONS_PER_MESSAGE - 1]);
+
+	// for (uint8_t cnt_fill=0; cnt_fill < 50; cnt_fill++)
+	// {
+	// 	seismometerAcc[cnt_fill] = (int32_t)0;
+	// }
+
+  Serial.print("Reseting ... ");
+	memset(seismometerAcc, (int32_t)0, NBR_ACCELERATIONS_PER_MESSAGE);
+  Serial.println("done");
+
+  Serial.println("Current seismometer data in the array: ");
+  for (uint8_t cnt_fill=0; cnt_fill < NBR_ACCELERATIONS_PER_MESSAGE - 1; cnt_fill++)
+	{
+		Serial.printf("%ld, ", seismometerAcc[cnt_fill]);
+	}
+  Serial.printf("%ld\r\n", seismometerAcc[NBR_ACCELERATIONS_PER_MESSAGE - 1]);
 
 } // END OF THE FUNCTION
 

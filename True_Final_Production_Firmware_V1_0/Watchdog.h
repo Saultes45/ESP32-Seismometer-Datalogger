@@ -50,8 +50,13 @@ const uint8_t   wdtTimeout      = 4;    // WDT timeout in [s]
 const uint8_t   MAX_NBR_WDT     = 10;   // Recurring WDT threshold on counter
 const int       WDT_SLP_RECUR_S = 1800; // Time to sleep if WDT triggers more than the threshold //Be careful for the type as the esprintf doesn't like some of them
 
+
+
 // -------------------------- Global Variables --------------------------
 
 hw_timer_t *    timer           = NULL;
+
+unsigned int nbr_WDTTrig;
+
 
 // END OF THE FILE
