@@ -35,10 +35,10 @@ const char      SOM_LOG                     = '$'; // Start of message indicator
 const char      FORMAT_SEP                  = ','; // Separator between the different files so that the data can be read/parsed by softwares
 const uint16_t  MAX_LINES_PER_FILES         = NBR_LOG_BEFORE_ACTION;  // Maximum number of lines that we want stored in 1 SD card file. It should be about ...min worth
 //const char      SESSION_SEPARATOR_STRING[]  =  "----------------------------------";
-const uint8_t   LOG_PWR_PIN_1               = 25;  // To turn the geophone ON and OFF
-const uint8_t   LOG_PWR_PIN_2               = 26;  // To turn the geophone ON and OFF
-const uint8_t   LOG_PWR_PIN_3               = 12;  // To turn the geophone ON and OFF
-const uint8_t   LOG_PWR_PIN_4               = 27;  // To turn the geophone ON and OFF
+const uint8_t   LOG_PWR_PIN_1               = 25;  // To turn the adalogger Feather ON and OFF
+const uint8_t   LOG_PWR_PIN_2               = 26;  // To turn the adalogger Feather ON and OFF
+const uint8_t   LOG_PWR_PIN_3               = 12;  // To turn the adalogger Feather ON and OFF
+const uint8_t   LOG_PWR_PIN_4               = 27;  // To turn the adalogger Feather ON and OFF
 
 // -------------------------- Global Variables --------------------------
 

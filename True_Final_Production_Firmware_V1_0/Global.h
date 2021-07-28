@@ -466,7 +466,8 @@ void waitForRS1DWarmUp(void) {
 }
 
 //******************************************************************************************
-void logToSDCard(void) {
+void logToSDCard(void) 
+{
 
 	bool errorOpeningFile = true;
 
@@ -564,6 +565,8 @@ void logToSDCard(void) {
 	for (uint8_t cnt_Acc = 0; cnt_Acc < NBR_ACCELERATIONS_PER_MESSAGE -1 ; cnt_Acc++)
 	{
 		// Save the results (acceleration is measured in ???)
+    tempCharArray[] = 
+
 		dataString += String(seismometerAcc[cnt_Acc]);
 		dataString += FORMAT_SEP;
 	}
@@ -651,13 +654,12 @@ void logToSDCard(void) {
 			cntLinesInFile = 0;
 
 			/* The next commented out lines are removed since 1 LOG step = 1 file
-	// Create a new file
-	createNewFile();
-	
-	#ifdef SERIAL_VERBOSE
-	Serial.println("Reached the max number of lines per file, starting a new one");
-	#endif
-	*/
+        // Create a new file
+        createNewFile();
+        #ifdef SERIAL_VERBOSE
+          Serial.println("Reached the max number of lines per file, starting a new one");
+        #endif
+      */
 
 			
 			// Limit back the frequency of the CPU to consume less power
