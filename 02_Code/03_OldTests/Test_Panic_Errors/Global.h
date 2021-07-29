@@ -564,9 +564,6 @@ void logToSDCard(void)
 
 	for (uint8_t cnt_Acc = 0; cnt_Acc < NBR_ACCELERATIONS_PER_MESSAGE -1 ; cnt_Acc++)
 	{
-		// Save the results (acceleration is measured in ???)
-    tempCharArray[] = 
-
 		dataString += String(seismometerAcc[cnt_Acc]);
 		dataString += FORMAT_SEP;
 	}
@@ -696,8 +693,9 @@ void readRS1DBuffer(void)
 	{
 		if(GeophoneSerial.find("[\""))// test the received buffer for SOM_CHAR_SR
 		{
+      memset(RS1Dmessage, 0, RX_BUFFER_SIZE); // clean the message field
+			cnt_savedMessage = 0; //reset 
 
-			cnt_savedMessage = 0;
 			RS1Dmessage[cnt_savedMessage] = '[';
 			cnt_savedMessage ++;
 			RS1Dmessage[cnt_savedMessage] = '\"';
@@ -720,7 +718,6 @@ void readRS1DBuffer(void)
 				parseGeophoneData();
 			}
 		}
-		memset(RS1Dmessage, 0, RX_BUFFER_SIZE); // clean the message field anyway
 	}
 }
 
