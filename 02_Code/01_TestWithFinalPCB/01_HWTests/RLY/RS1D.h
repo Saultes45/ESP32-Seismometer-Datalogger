@@ -37,7 +37,7 @@ const uint16_t      RS1D_WARMUP_TIME_MS               =  5000;   // in [ms]
 #define             GEOPHONE_TIMEOUT_MS                  100     // For the character search in buffer, in [ms]
 #define             GeophoneSerial                       Serial1 // Use the 2nd (out of 3) hardware serial of the ESP32
 const uint8_t       RS1D_PWR_PIN_1                    =  14;     // To turn the geophone ON and OFF
-
+const int32_t       defaultSeismometerAccValue        =  0;
 
 // -------------------------- Global Variables --------------------------
 

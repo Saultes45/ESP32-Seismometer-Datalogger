@@ -565,8 +565,6 @@ void logToSDCard(void)
 	for (uint8_t cnt_Acc = 0; cnt_Acc < NBR_ACCELERATIONS_PER_MESSAGE -1 ; cnt_Acc++)
 	{
 		// Save the results (acceleration is measured in ???)
-    tempCharArray[] = 
-
 		dataString += String(seismometerAcc[cnt_Acc]);
 		dataString += FORMAT_SEP;
 	}
@@ -1378,14 +1376,14 @@ void resetSeismometerData (void)
 	}
   Serial.printf("%ld\r\n", seismometerAcc[NBR_ACCELERATIONS_PER_MESSAGE - 1]);
 
-	// for (uint8_t cnt_fill=0; cnt_fill < 50; cnt_fill++)
-	// {
-	// 	seismometerAcc[cnt_fill] = (int32_t)0;
-	// }
+	 for (uint8_t cnt_fill=0; cnt_fill < NBR_ACCELERATIONS_PER_MESSAGE; cnt_fill++)
+	 {
+	 	seismometerAcc[cnt_fill] = (int32_t) defaultSeismometerAccValue;
+	 }
 
-  Serial.print("Reseting ... ");
-	memset(seismometerAcc, (int32_t)0, NBR_ACCELERATIONS_PER_MESSAGE);
-  Serial.println("done");
+//  Serial.print("Reseting ... ");
+//	memset(seismometerAcc, (int32_t)1, NBR_ACCELERATIONS_PER_MESSAGE);
+//  Serial.println("done");
 
   Serial.println("Current seismometer data in the array: ");
   for (uint8_t cnt_fill=0; cnt_fill < NBR_ACCELERATIONS_PER_MESSAGE - 1; cnt_fill++)

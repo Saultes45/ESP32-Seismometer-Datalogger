@@ -44,6 +44,7 @@ void setup()
 	
 	#ifdef SERIAL_VERBOSE
 		Serial.begin(CONSOLE_BAUD_RATE);
+    while (!Serial) // wait for serial port to connect. Needed for native USB port only
 		Serial.println("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"); // Indicates a wakeup to the console
 	#endif
 
@@ -61,24 +62,11 @@ void setup()
 	// Set up RTC + SD
 	// ----------------
 
-	//  turnLogON(); // Start the feather datalogger
-	//  delay(1000); // Wait for the LOG to be ready
-	//  testRTC();
+	  
+//	  testRTC();
 	//  testSDCard();
-	//  turnLogOFF(); // Turn the feather datalogger OFF, we will go to OVW and we don't need it
-
-
-
-	// Start the RS1D
-	//----------------
-	turnRS1DON();
-
-	// Start the HW serial for the Geophone/STM
-	// ----------------------------------------
-	GeophoneSerial.begin(GEOPHONE_BAUD_RATE);
-	GeophoneSerial.setTimeout(GEOPHONE_TIMEOUT_MS); // Set the timeout in [ms] (for findUntil)
-
-	//waitForRS1DWarmUp();
+//	turnRS1DON();
+// turnGPSON();
 
 	// Preaparing the watchdog
 	//------------------------
@@ -97,7 +85,7 @@ void setup()
 		Serial.println("Let's check the battery level, since we are boot");
 	#endif
 	checkBatteryLevel();
-	// The file has already been closed in the function logToSDCard
+
 
 } // END OF SET UP
 
@@ -109,10 +97,27 @@ void setup()
 void loop()
 {
 
+  turnLogON(); // Start the feather datalogger
+  delay(4000);
+	timerWrite(timer, 0);
+  turnLogOFF(); // Start the feather datalogger
+  delay(4000);
+  timerWrite(timer, 0);
+  delay(4000);
+  timerWrite(timer, 0);
+  turnRS1DON();
+  delay(4000);
+  timerWrite(timer, 0);
+  turnRS1DOFF();
+   delay(4000);
+  timerWrite(timer, 0);
+   turnGPSON();
+    delay(4000);
+  timerWrite(timer, 0);
+   turnGPSOFF();
 
-	// Reset the timer (i.e. feed the watchdog)
-	//------------------------------------------
-	timerWrite(timer, 0); // need to be before a potential sleep
+
+  delay(500);
 
 } // END OF LOOP
 
