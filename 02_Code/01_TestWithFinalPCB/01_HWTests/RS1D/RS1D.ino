@@ -58,7 +58,7 @@ void setup()
 	// --------------
 	resetSeismometerData();
 
-turnRS1DON();
+  turnRS1DON();
 
 	// Preaparing the watchdog
 	//------------------------
