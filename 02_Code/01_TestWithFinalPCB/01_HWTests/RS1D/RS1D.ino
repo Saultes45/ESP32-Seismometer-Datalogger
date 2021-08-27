@@ -44,7 +44,7 @@ void setup()
 	
 	#ifdef SERIAL_VERBOSE
 		Serial.begin(CONSOLE_BAUD_RATE);
-    while (!Serial) // wait for serial port to connect. Needed for native USB port only
+    while (!Serial) // wait for serial port to connect. Needed for native USB port only <DEBUG> <REMOVE>
 		Serial.println("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"); // Indicates a wakeup to the console
 	#endif
 
@@ -58,7 +58,105 @@ void setup()
 	// --------------
 	resetSeismometerData();
 
+  
+
+
+  // <DEBUG>, <REMOVE>
+  // --------------
+  noFixGPS = true;
+  turnGPSON();
+  turnLogON();
+  waitForGPSFix();
+  // if there was no GPS fix, we need to start and enable the RTC
+  if(noFixGPS)
+  {
+    GPSNeeded = false;
+    GPSTimeAvailable = false;
+    testRTC();
+
+Serial.println("-----------------------------------");
+  Serial.println("Let's see if the RTC is running ...");
+  Serial.println("There should be about 1s difference");
+
+  // Time t
+  DateTime now = rtc.now();
+  Serial.print(now.year(), DEC);
+  Serial.print('/');
+  Serial.print(now.month(), DEC);
+  Serial.print('/');
+  Serial.print(now.day(), DEC);
+  Serial.print(' ');
+  Serial.print(now.hour(), DEC);
+  Serial.print(':');
+  Serial.print(now.minute(), DEC);
+  Serial.print(':');
+  Serial.print(now.second(), DEC);
+  Serial.println();
+
+  delay(1000);
+
+  // Time t+1s
+  now = rtc.now();
+  Serial.print(now.year(), DEC);
+  Serial.print('/');
+  Serial.print(now.month(), DEC);
+  Serial.print('/');
+  Serial.print(now.day(), DEC);
+  Serial.print(' ');
+  Serial.print(now.hour(), DEC);
+  Serial.print(':');
+  Serial.print(now.minute(), DEC);
+  Serial.print(':');
+  Serial.print(now.second(), DEC);
+  Serial.println();
+
+  Serial.println("-----------------------------------");
+    
+    //turnGPSOFF();
+  }
+
+  // Start the feather datalogger
+//  turnLogON();
+//  delay(1000); // Wait 1s for the feather to be ready // <DEBUG>
+  
+  #ifdef USE_GPS
+  // Start the GPS (it will take 1.9s to get the 1st GPS message (no fix))
+//  turnGPSON();
+//  GPSNeeded = true; // for the next loops, to know that a GPS buffer reading is indeed required
+  // Set up the GPS so it is ready to be used for LOG (timestamps)
+  testGPS();
+  waitForGPSFix(); // This is blocking
+  
+
+  //noFixGPS = false; //<DEBUG> <REMOVE ME>
+  
+  // if there was no GPS fix, we need to start and enable the RTC
+  if(noFixGPS)
+  {
+    GPSNeeded = false;
+    GPSTimeAvailable = false;
+//    testRTC();
+    //turnGPSOFF();
+  }
+  #else
+  turnGPSON();// You have to turn it on otherwise the RTC I2C doesn't work
+  delay(5000);
+  testRTC();
+  turnGPSOFF();
+  #endif
+
+  testSDCard();
+  // Create a new file (we do that here because we need to wait RTC/GPS for the timestamp)
+  createNewFile();
+
+  
+
+  // Start the HW serial for the Geophone/STM
+  // ----------------------------------------
   turnRS1DON();
+  GeophoneSerial.begin(GEOPHONE_BAUD_RATE);
+  GeophoneSerial.setTimeout(GEOPHONE_TIMEOUT_MS); // Set the timeout in [ms] (for findUntil)
+
 
 	// Preaparing the watchdog
 	//------------------------
@@ -78,6 +176,8 @@ void setup()
 	#endif
 	checkBatteryLevel();
 
+  Serial.println("#############################################################");
+
 
 } // END OF SET UP
 
@@ -88,6 +188,254 @@ void setup()
 // -------------------------- Loop --------------------------
 void loop()
 {
+
+  readRS1DBuffer();
+
+  if (goodMessageReceived_flag)
+  {
+    goodMessageReceived_flag = false; // Reset the flag
+
+    currentState = STATE_LOG; // force a log
+
+    switch (currentState) // Check which mode we are in
+    {
+    case STATE_OVERWATCH: // Choose between: Continue, Sleep, Log
+      {
+        // Statistics
+        //-----------
+        cnt_Overwatch++;
+
+        nbr_bumpDetectedTotal = nbr_bumpDetectedTotal + nbr_bumpDetectedLast;
+
+        // Sequencing logic
+        //-----------------
+
+        if (nbr_bumpDetectedLast > 0)
+        {
+          nbr_messagesWithBumps++;
+          nbr_bumpDetectedLast = 0; // RESET (redundant but security)
+        }
+
+        if (cnt_Overwatch >= NBR_OVERWATCH_BEFORE_ACTION)
+        {
+          
+          
+          #ifdef SERIAL_VERBOSE
+          Serial.println("End of the watch");
+          Serial.printf("We have reached the desired number of overwatch cycles: %d over %d \r\n", cnt_Overwatch, NBR_OVERWATCH_BEFORE_ACTION);
+          Serial.println("Time to make a descision: LOG or SLEEP?");
+          Serial.printf("We have detected %d bumps (or %d messages) - %d desired\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_BUMPS_DETECTED_BEFORE_LOG);
+          #endif
+
+          cnt_Overwatch = 0; // RESET (redundant but security) <DEBUG>
+          fileName = "";    // Reset the filename // RESET (redundant but security) <DEBUG>
+
+          if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
+          {
+            #ifdef SERIAL_VERBOSE
+            Serial.println("We reached our number-of-bumps goal, let's LOG!");
+            #endif
+            nbr_bumpDetectedTotal = 0;// RESET (redundant but security)
+            //nextState = STATE_LOG;
+          }
+          else
+          {
+            #ifdef SERIAL_VERBOSE
+            Serial.println("We did NOT reach our number of bumps goal, let's SLEEP");
+            #endif
+
+            // Switch the RS1D off immediately to save power
+            // Note: it will switched off anyway late when, the esp is put to deep sleep
+            //turnRS1DOFF();
+
+//            nextState = STATE_SLEEP;
+  
+          #ifdef SERIAL_VERBOSE
+          Serial.print("Looks like we need to change the state to: ");
+          Serial.print(nextState);
+          Serial.println(" (1 = LOG, 2 = SLEEP, 3 = OVW)");
+          Serial.print("Resetting some variables...");
+          #endif
+  
+          nbr_bumpDetectedTotal   = 0;
+          nbr_bumpDetectedLast    = 0;
+          nbr_messagesWithBumps   = 0;
+          cnt_Overwatch           = 0;
+          cnt_Log                 = 0;
+  
+          #ifdef SERIAL_VERBOSE
+          Serial.println("Done");
+          #endif
+          }
+        }
+        else
+        {
+          #ifdef SERIAL_VERBOSE
+          Serial.printf("Keep looping on OVERWATCH for %d more iterations\r\n", NBR_OVERWATCH_BEFORE_ACTION - cnt_Overwatch);
+          #endif
+          nextState = STATE_OVERWATCH; // <INVESTIAGTE> probably redundant
+        }
+
+
+        break;
+      }/* [] END OF case STATE_OVERWATCH: */
+
+    case STATE_LOG:
+      {
+        // Statistics
+        //-----------
+        nbr_bumpDetectedTotal = nbr_bumpDetectedTotal + nbr_bumpDetectedLast;
+
+        if (nbr_bumpDetectedLast > 0)
+        {
+          nbr_messagesWithBumps++;
+        }
+
+        // Log to SD
+        //----------
+        logToSDCard();
+
+        // Sequencing logic
+        //-----------------
+
+        cnt_Log ++; // Increment the counter telling how many LOG cycles have been performed
+
+        if (cnt_Log >= NBR_LOG_BEFORE_ACTION)
+        {
+
+          cnt_Log = 0;        // RESET (redundant but security) <DEBUG>
+          fileName = "";      // RESET the filename // RESET (redundant but security) <DEBUG>
+          dataFile.close();   // RESET (redundant but security) <DEBUG>
+
+          #ifdef SERIAL_VERBOSE
+          Serial.println("Let's check the battery level, since we are at the end of the LOG");
+          #endif
+          checkBatteryLevel();
+          // The file has already been closed in the function logToSDCard
+          
+          #ifdef SERIAL_VERBOSE
+          Serial.println("End of the LOG");
+          Serial.printf("We have reached the desired number of LOG cycles: %d over %d \r\n", cnt_Log, NBR_LOG_BEFORE_ACTION);
+          Serial.println("Time to make a descision: OVW or continue LOG?");
+          Serial.printf("We have detected %d bumps (or %d messages) during this log cycle of %d messages\r\n", nbr_bumpDetectedTotal, nbr_messagesWithBumps, NBR_LOG_BEFORE_ACTION);
+          #endif
+
+          
+          
+
+          if (nbr_bumpDetectedTotal >= NBR_BUMPS_DETECTED_BEFORE_LOG)
+          {
+            
+            #ifdef SERIAL_VERBOSE
+            #endif
+            nextState = STATE_LOG;
+
+            // We need to create a new file
+            createNewFile();
+
+            resetVariables();
+
+          }
+          else
+          {
+
+            #ifdef SERIAL_VERBOSE
+            Serial.println("We did NOT reach our number-of-bumps goal, let's OVERWATCH");
+            #endif
+
+//            nextState = STATE_OVERWATCH;
+            nextState = STATE_LOG; // <DEBUG> force a log instead of an overwatch
+
+            // We need to create a new file
+            createNewFile();
+
+            resetVariables();
+
+              // <DEBUG> force a log instead of an overwatch
+//            turnLogOFF(); // Stop the feather datalogger 
+//            turnGPSOFF(); // Stop the GPS
+            GPSNeeded = false;
+            // Leave the RS1D ON since we are going to overwatch
+          }
+        }
+        else
+        {
+          #ifdef SERIAL_VERBOSE
+          Serial.printf("Keep looping on LOG for %d more iterations\r\n", NBR_LOG_BEFORE_ACTION - cnt_Log);
+          #endif
+          nextState = STATE_LOG;
+
+        }
+
+        break;
+      }/* [] END OF case STATE_LOG: */
+
+    default:
+      {
+        #ifdef SERIAL_VERBOSE
+        Serial.println("Unknown step type, something went very wrong!");
+        Serial.printf("Asked step: %d \r\n", currentState);
+        #endif
+
+        //Trigger the watchdog to force a reboot
+        delay(wdtTimeout * S_TO_MS_FACTOR);
+
+        break;
+      }/* [] END OF "unknown" and "other" case */
+    } // END of SWITCH
+
+    // Sleep management
+    //------------------
+    if (nextState == STATE_SLEEP)
+    {
+      Serial.println("Since we did not receive enough bumps during OVERWATCH, we sleep to save battery");
+
+      // Deep sleep
+      // -----------
+
+      prepareSleep();
+      
+      // Start the deep sleep
+      esp_deep_sleep_start();
+
+      #ifdef SERIAL_VERBOSE
+      Serial.println("If you see this, there is a problem with the deep sleep");
+      #endif
+
+    }
+    else // if the next step is NOT a sleep
+    {
+      //      Serial.println("The next state is NOT a SLEEP");
+
+      if (nextState != currentState)
+      {
+        #ifdef SERIAL_VERBOSE
+        Serial.print("Looks like we need to change the state to: ");
+        Serial.print(nextState);
+        Serial.println(" (1 = LOG, 2 = SLEEP, 3 = OVW)");
+        #endif
+
+        resetVariables();
+
+        currentState = nextState; // For next loop
+
+        #ifdef SERIAL_VERBOSE
+        Serial.println("Ready for the next state");
+        #endif
+
+      }
+      //      else
+      //      {
+      //        Serial.println("Just keep on looping");
+      //      }
+    }/* [] END OF "if" SLEEP: */
+
+
+  } // END of goodMessageReceived_flag
+
+  // Reset the timer (i.e. feed the watchdog)
+  //------------------------------------------
+  timerWrite(timer, 0); // need to be before a potential sleep
 
 
 
