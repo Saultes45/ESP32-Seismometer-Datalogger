@@ -1,104 +1,99 @@
-
 /* ========================================
 *
-* Copyright University of Auckland Ltd, 2021
+* Copyright ??
 * All Rights Reserved
 * UNPUBLISHED, LICENSED SOFTWARE.
 *
 * Metadata
-* Written by    : Nathanaël Esnault
-* Verified by   : N/A
+* Written by    : ??
+* Verified by   : Nathanaël Esnault
 * Creation date : 2021-06-07 (Queen's b-day)
-* Version       : 0.1 (finished on ...)
+* Version       : 1.0 (finished on 2021-..-..)
 * Modifications :
 * Known bugs    :
 *
 *
 * Possible Improvements
 *
-*
 * Notes
-*
 *
 * Ressources (Boards + Libraries Manager)
 *
 *
 * TODO
 *
-*
+* ========================================
 */
 
-#define SERIAL_VERBOSE
-
+// -------------------------- Includes --------------------------
 #include <Adafruit_GPS.h>
 
-// Connect to the GPS on the hardware I2C port
-Adafruit_GPS GPS(&Wire);
+// -------------------------- Defines and Const --------------------------
+#define SERIAL_VERBOSE
 
-// Set GPSECHO to 'false' to turn off echoing the GPS data to the Serial console
-// Set to 'true' if you want to debug and listen to the raw GPS sentences
-#define GPSECHO false
+//// Set GPSECHO to 'false' to turn off echoing the GPS data to the Serial console
+//// Set to 'true' if you want to debug and listen to the raw GPS sentences
+//#define GPSECHO false
 
-uint32_t lastTime = millis(); // Just for display <REMOVE>
-uint32_t timer = millis();// Just for display <REMOVE>
-
-// My variables
-char    timeStampFormat_Line[]      = "YYYY_MM_DD__hh_mm_ss";   // naming convention for EACH LINE OF THE FILE logged to the SD card
-char    timeStampFormat_FileName[]  = "YYYY_MM_DD__hh_mm_ss";   // naming convention for EACH FILE NAME created on the SD card
-String      fileName              = "";           // Name of the current opened file on the SD card
 #define SOM_LOG         '$' 
 #define FORMAT_SEP      ',' 
+
+const uint8_t GPS_BOOST_ENA_PIN  = 21;  // To turn the BOOST converter of the GPS ON and OFF
+
+// -------------------------- Global Variables --------------------------
+// Connect to the GPS on the hardware I2C port
+Adafruit_GPS GPS(&Wire);
 
 // -------------------------- Set up --------------------------
 
 void setup()
 {
 
-#ifdef SERIAL_VERBOSE
-  Serial.begin(115200);
-  Serial.println("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%"); // Indicates a wakeup to the console
-  Serial.println("I2C GPS test");
-#endif
+  // GPS power
+  //----------
+  pinMode (GPS_BOOST_ENA_PIN    , OUTPUT);
+  digitalWrite(GPS_BOOST_ENA_PIN, HIGH); // Start the 5V boost convert
 
+  // Serial port
+  //------------
+  // make this baud rate fast enough so we aren't waiting on it
+  Serial.begin(115200);
+
+  Serial.println('');
+  Serial.println('');
+  Serial.println("$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$");
+  Serial.println("Adafruit GPS library I2C test");
+  Serial.println('');
+
+
+  Serial.println("Starting to address the GPS...");
   GPS.begin(0x10);  // The I2C address to use is 0x10
+
+
+  // Set up communication
+  // ---------------------
+  GPS.sendCommand(PMTK_SET_BAUD_115200);      // Ask the GPS to send us data at 115200bps
+  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ); // 10 Hz update rate (message only)
+  GPS.sendCommand(PMTK_API_SET_FIX_CTL_5HZ);  // Can't fix position faster than 5 times a second
 
 
   // Turn OFF all GPS output
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_OFF);
 
-  //  GPS.flush();
+    // Turn OFF all GPS output
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_OFF);
+  
+  // Remove all data in buffer
+  unsigned long startedWaiting = millis();
+  while((GPS.available()) && (millis() - startedWaiting <= 2000))
+  {
+      GPS.read(); // don't save the data, just dump
+//      Serial.write(GPS.read());    
+      Serial.print('.');
+  }
+  Serial.println(" done");
 
-  // Set up communication
-  // ---------------------
-  GPS.sendCommand(PMTK_SET_BAUD_115200); // Ask the GPS to send us data as 115200
-  GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ); // 10 Hz update rate (message only)
-  //GPS.sendCommand(PMTK_SET_NMEA_UPDATE_1HZ); // 1 Hz update rate
-  GPS.sendCommand(PMTK_API_SET_FIX_CTL_5HZ);  // Can't fix position faster than 5 times a second
-
-
-
-  // Just once, request updates on antenna status, comment out to keep quiet
-  GPS.sendCommand(PGCMD_ANTENNA);
-  delay(1000);
-  //  #ifdef SERIAL_VERBOSE
-  //    while (GPS.available())
-  //    {
-  //      Serial.print(GPS.read());
-  //    }
-  //  #endif
-
-  //  Just once, request firmware version
-  GPS.println(PMTK_Q_RELEASE);
-  delay(1000);
-  //    #ifdef SERIAL_VERBOSE
-  //    while (GPS.available())
-  //    {
-  //      Serial.print(GPS.read());
-  //    }
-  //  #endif
-
-  // Turn on RMC (recommended minimum) and GGA (fix data) including altitude
-  //  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCGGA);
+  
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);
 
 
@@ -106,15 +101,14 @@ void setup()
 
 
 // -------------------------- Loop --------------------------
-void loop() // run over and over again
+void loop()
 {
   // read data from the GPS in the 'main loop'
   char c = GPS.read();
 
   // if a sentence is received, we can check the checksum, parse it...
-  if (GPS.newNMEAreceived()) {
-
-
+  if (GPS.newNMEAreceived()) 
+  {
     if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
     return; // we can fail to parse a sentence in which case we should just wait for another
 
@@ -138,7 +132,7 @@ void loop() // run over and over again
       dataString += SOM_LOG;
 
       // Read the GPS time
-      //------------------------------------------
+      //-------------------
       
       dataString += String(2000 + GPS.year);
       dataString += "_";
@@ -177,4 +171,7 @@ void loop() // run over and over again
       #endif
     }
   }
-}
+}// END OF LOOP
+
+
+// END OF SCRIPT
