@@ -84,8 +84,6 @@ const int CONSOLE_BAUD_RATE = 115200;
 
 // -------------------------- Global Variables --------------------------
 
-// -------------------------- Defines --------------------------
-// General
 
 
 // -------------------------- Functions declaration [22]--------------------------
@@ -116,6 +114,7 @@ void      changeCPUFrequency  (void);           // Change the CPU frequency and 
 void      prepareWDT          (void); // For the Timer and ISR
 void      getGPSTime          (void);
 void      prepareSleep        (void);
+void      resetVariables      (void);
 #ifdef USE_GPS
   void      testGPS             (void);
   void      waitForGPSFix       (void);
@@ -340,7 +339,7 @@ void checkBatteryLevel (void)
 	{
 		#ifdef SERIAL_VERBOSE
 		Serial.println("Warning: Low battery!");
-		Serial.println("Going to sleep");
+		//Serial.println("Going to sleep"); // <DEBUG> <UNCOMMENT>
 		#endif
 		
 		// Force the board to sleep by triggering an error by
@@ -355,6 +354,13 @@ void checkBatteryLevel (void)
 		Serial.println("----------------------------------------");
 		#endif
 	}
+
+  
+  #ifdef SERIAL_VERBOSE
+  Serial.println("Battery check done!");
+  Serial.println("----------------------------------------");
+  #endif
+  
 }
 
 //******************************************************************************************
@@ -469,10 +475,10 @@ void waitForRS1DWarmUp(void) {
 void logToSDCard(void) 
 {
 
-	bool errorOpeningFile = true;
+	bool errorOpeningFile = true; // initialsed as "problem"
 
-	// Create a string for assembling the data to log
-	//-----------------------------------------------
+	// Create 2 LOCAL strings for assembling the data to log
+	//------------------------------------------------------
 	String dataString  = "";
 	String myTimestamp = "";
 
@@ -548,8 +554,7 @@ void logToSDCard(void)
 
 	dataString += FORMAT_SEP;
 
-	Serial.print("Filename: ");
-	Serial.println(fileName);
+
 
 	// Write the accelerations in the message
 	//------------------------------------------
@@ -562,7 +567,7 @@ void logToSDCard(void)
   // memcpy(string, array, x);
   // string[x] = '\0'; 
 
-	for (uint8_t cnt_Acc = 0; cnt_Acc < NBR_ACCELERATIONS_PER_MESSAGE -1 ; cnt_Acc++)
+	for (uint8_t cnt_Acc = 0; cnt_Acc < NBR_ACCELERATIONS_PER_MESSAGE - 1 ; cnt_Acc++)
 	{
 		// Save the results (acceleration is measured in ???)
 		dataString += String(seismometerAcc[cnt_Acc]);
@@ -577,6 +582,11 @@ void logToSDCard(void)
 	Serial.println(dataString);
 	// Serial.flush(); // Takes about 4.5x longer 
 #endif
+
+
+  Serial.print("Filename: ");
+  Serial.println(fileName);
+
 
 	// Log data in the SD card
 	//------------------------
@@ -624,7 +634,7 @@ void logToSDCard(void)
 			else // problem opening the file after open-close
 			{
 				#ifdef SERIAL_VERBOSE
-				Serial.println("File problem persistant");
+				Serial.println("File problem persistant, aborting");
 				#endif
 
 				// Resetting some global variables
@@ -692,6 +702,7 @@ void readRS1DBuffer(void)
 
 	if (GeophoneSerial.available())
 	{
+//    Serial.println("Available"); //<DEBUG>
 		if(GeophoneSerial.find("[\""))// test the received buffer for SOM_CHAR_SR
 		{
 
@@ -1230,8 +1241,8 @@ void waitForGPSFix(void)
 
 	// Big waiting loop
 	// -----------------
-	while (noFixGPS && ((millis() - startedWaiting) <= GPS_NO_FIX_TIMEOUT_MS))
-	{
+//	while (noFixGPS && ((millis() - startedWaiting) <= GPS_NO_FIX_TIMEOUT_MS))
+//	{
 		//      // < DEBUG > <REMOVE WHEN FINISHED>
 		//      cnt_whileLoop ++;
 		//      Serial.print((millis() - startedWaiting));
@@ -1243,40 +1254,40 @@ void waitForGPSFix(void)
 		
 		// Reset the timer (i.e. feed the watchdog)
 		//------------------------------------------
-		timerWrite(timer, 0); // need to be before a potential sleep
+//		timerWrite(timer, 0); // need to be before a potential sleep
 		
-		// read data from the GPS in the 'main loop'
-		char c = GPS.read();
-
-		// if a sentence is received, we can check the checksum, parse it...
-		if (GPS.newNMEAreceived()) {
-
-
-			if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
-			return; // we can fail to parse a sentence in which case we should just wait for another
-
-			if(not(GPS.fix))
-			{
-				#ifdef SERIAL_VERBOSE
-				Serial.print("Still no fix, keep looping for: ");
-				Serial.print(GPS_NO_FIX_TIMEOUT_MS - (millis() - startedWaiting));
-				Serial.println(" [s]");
-				Serial.print("Fix: ");
-				Serial.print((int)GPS.fix);
-				Serial.print(" quality: ");
-				Serial.println((int)GPS.fixquality);
-				#endif
-			}
-			else
-			{
-				noFixGPS = false; // We have a fix! Yay!
-			}
-
-			// Reset the timer (i.e. feed the watchdog)
-			//------------------------------------------
-			timerWrite(timer, 0); // need to be before a potential sleep
-		}
-	}
+//		// read data from the GPS in the 'main loop'
+//		char c = GPS.read();
+//
+//		// if a sentence is received, we can check the checksum, parse it...
+//		if (GPS.newNMEAreceived()) {
+//
+//
+//			if (!GPS.parse(GPS.lastNMEA())) // this also sets the newNMEAreceived() flag to false
+//			return; // we can fail to parse a sentence in which case we should just wait for another
+//
+//			if(not(GPS.fix))
+//			{
+//				#ifdef SERIAL_VERBOSE
+//				Serial.print("Still no fix, keep looping for: ");
+//				Serial.print(GPS_NO_FIX_TIMEOUT_MS - (millis() - startedWaiting));
+//				Serial.println(" [s]");
+//				Serial.print("Fix: ");
+//				Serial.print((int)GPS.fix);
+//				Serial.print(" quality: ");
+//				Serial.println((int)GPS.fixquality);
+//				#endif
+//			}
+//			else
+//			{
+//				noFixGPS = false; // We have a fix! Yay!
+//			}
+//
+//			// Reset the timer (i.e. feed the watchdog)
+//			//------------------------------------------
+//			timerWrite(timer, 0); // need to be before a potential sleep
+//		}
+//	}
 
 	#ifdef SERIAL_VERBOSE
 	Serial.println("Done waiting for GPS fix: FIX or TIMEOUT?...");
@@ -1411,6 +1422,26 @@ void prepareSleep (void)
 #endif
 } // END OF THE FUNCTION
 
+
+//******************************************************************************************
+void      resetVariables      (void)
+{
+  #ifdef SERIAL_VERBOSE
+  Serial.print("Resetting some variables...");
+  #endif
+
+  nbr_bumpDetectedTotal   = 0;
+  nbr_bumpDetectedLast    = 0;
+  nbr_messagesWithBumps   = 0;
+  cnt_Overwatch           = 0;
+  cnt_Log                 = 0;
+
+  
+  #ifdef SERIAL_VERBOSE
+  Serial.println("Done");
+  #endif
+  
+} // END OF THE FUNCTION
 
 
 // END OF THE FILE
