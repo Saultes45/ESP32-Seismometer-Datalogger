@@ -46,7 +46,7 @@
 
 
 // -------------------------- Defines and Const --------------------------
-#define GPS_PPS_PIN                      27   // To get an interrupt each time there is a PPS from GPS
+const uint8_t GPS_PPS_PIN              = 27;  // To get an interrupt each time there is a PPS from GPS
 const uint8_t GPS_BOOST_ENA_PIN        = 21;  // To turn the BOOST converter of the GPS ON and OFF
 //#define WAIT_GPS_FIX                        // Comment out to NOT wait until we have a GPS fix before we begin
 
@@ -56,18 +56,19 @@ Adafruit_GPS  GPS(&Wire);
 DateTime      timeStamp;             // MUST be global!!!!! or it won't update
 
 char timeStampFormat_Line[]     = "YYYY_MM_DD__hh_mm_ss";
-    //source https://github.com/adafruit/RTClib/blob/master/examples/toString/toString.ino
-    // HERE -> look for user "cattledog" : https://forum.arduino.cc/t/now-rtc-gets-stuck-if-called-in-setup/632619/3 
-    //buffer can be defined using following combinations:
-    // hh   - hour with a leading zero (00 to 23)
-    // mm   - minute with a leading zero (00 to 59)
-    // ss   - whole second with a leading zero where applicable (00 to 59)
-    // YYYY - year as four digit number
-    // YY   - year as two digit number (00-99)
-    // MM   - month as number with a leading zero (01-12)
-    // MMM  - abbreviated English month name ('Jan' to 'Dec')
-    // DD   - day as number with a leading zero (01 to 31)
-    // DDD  - abbreviated English day name ('Mon' to 'Sun')
+
+//source https://github.com/adafruit/RTClib/blob/master/examples/toString/toString.ino
+// HERE -> look for user "cattledog" : https://forum.arduino.cc/t/now-rtc-gets-stuck-if-called-in-setup/632619/3 
+//buffer can be defined using following combinations:
+// hh   - hour with a leading zero (00 to 23)
+// mm   - minute with a leading zero (00 to 59)
+// ss   - whole second with a leading zero where applicable (00 to 59)
+// YYYY - year as four digit number
+// YY   - year as two digit number (00-99)
+// MM   - month as number with a leading zero (01-12)
+// MMM  - abbreviated English month name ('Jan' to 'Dec')
+// DD   - day as number with a leading zero (01 to 31)
+// DDD  - abbreviated English day name ('Mon' to 'Sun')
 
 // -------------------------- ISR ----------------
 volatile bool ppsDetected             = false;    //false= no rising edge, true= rising edge
@@ -192,7 +193,8 @@ void loop()
 
   // ISR check
   //----------
-  if (ppsDetected) {
+  if (ppsDetected) 
+  {
     Serial.println("PPS pulse received");
     ppsDetected = false;
   }
@@ -212,7 +214,10 @@ void loop()
   if (GPS.available()) 
   {
     char c = GPS.read();
-    Serial.write(c);
+    if ( (c != -1) && (c != ' ') ) // check this is not an empty char or a space: (isPrintable(c))
+    {
+      Serial.write(c);
+    }
   }
 
 //    if (GPS.newNMEAreceived()) 
