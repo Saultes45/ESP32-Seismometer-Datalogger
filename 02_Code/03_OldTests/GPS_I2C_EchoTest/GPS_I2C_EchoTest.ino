@@ -16,20 +16,6 @@
 * Possible Improvements
 *
 * Notes
-*
-  $GPZDA (not available for our unit)
-  Date & Time
-  
-  UTC, day, month, year, and local time zone.
-  
-  $--ZDA,hhmmss.ss,xx,xx,xxxx,xx,xx
-  hhmmss.ss = UTC
-  xx = Day, 01 to 31
-  xx = Month, 01 to 12
-  xxxx = Year
-  xx = Local zone description, 00 to +/- 13 hours
-  xx = Local zone minutes description (same sign as hours)
-*
 *  
 *
 * Ressources (Boards + Libraries Manager)
@@ -42,20 +28,25 @@
 
 // -------------------------- Includes --------------------------
 #include <Adafruit_GPS.h>
-#include <RTClib.h> 
+//#include <RTClib.h> 
 
 
 // -------------------------- Defines and Const --------------------------
-const uint8_t GPS_PPS_PIN              = 27;  // To get an interrupt each time there is a PPS from GPS
-const uint8_t GPS_BOOST_ENA_PIN        = 21;  // To turn the BOOST converter of the GPS ON and OFF
-//#define WAIT_GPS_FIX                        // Comment out to NOT wait until we have a GPS fix before we begin
+const uint8_t GPS_PPS_PIN        = 27;  // To get an interrupt each time there is a PPS from GPS
+const uint8_t GPS_BOOST_ENA_PIN  = 21;  // To turn the BOOST converter of the GPS ON and OFF
+//#define WAIT_GPS_FIX                 // Comment out to NOT wait until we have a GPS fix before we begin
+
+const uint8_t   LOG_PWR_PIN_1    = 25;  // To turn the adalogger Feather ON and OFF
+const uint8_t   LOG_PWR_PIN_2    = 26;  // To turn the adalogger Feather ON and OFF
+const uint8_t   LOG_PWR_PIN_3    = 12;  // To turn the adalogger Feather ON and OFF
+const uint8_t   LOG_PWR_PIN_4    = 27;  // To turn the adalogger Feather ON and OFF
 
 // -------------------------- Global Variables --------------------------
 // Connect to the GPS on the hardware I2C port
 Adafruit_GPS  GPS(&Wire);
-DateTime      timeStamp;             // MUST be global!!!!! or it won't update
+//DateTime      timeStamp;             // MUST be global!!!!! or it won't update
 
-char timeStampFormat_Line[]     = "YYYY_MM_DD__hh_mm_ss";
+//char timeStampFormat_Line[]     = "YYYY_MM_DD__hh_mm_ss";
 
 //source https://github.com/adafruit/RTClib/blob/master/examples/toString/toString.ino
 // HERE -> look for user "cattledog" : https://forum.arduino.cc/t/now-rtc-gets-stuck-if-called-in-setup/632619/3 
@@ -73,14 +64,23 @@ char timeStampFormat_Line[]     = "YYYY_MM_DD__hh_mm_ss";
 // -------------------------- ISR ----------------
 volatile bool ppsDetected             = false;    //false= no rising edge, true= rising edge
 
-//void IRAM_ATTR ISR_GPS_PPS() 
-//{
-//    ppsDetected = true; //set the flag
-//}
+void IRAM_ATTR ISR_GPS_PPS() 
+{
+    ppsDetected = true; //set the flag
+}
 
 // -------------------------- Set up --------------------------
 void setup() 
 {
+
+  pinMode (LOG_PWR_PIN_1    , OUTPUT);
+  pinMode (LOG_PWR_PIN_2    , OUTPUT);
+  pinMode (LOG_PWR_PIN_3    , OUTPUT);
+  pinMode (LOG_PWR_PIN_4    , OUTPUT);
+  digitalWrite(LOG_PWR_PIN_1, HIGH);
+  digitalWrite(LOG_PWR_PIN_2, HIGH);
+  digitalWrite(LOG_PWR_PIN_3, HIGH);
+  digitalWrite(LOG_PWR_PIN_4, HIGH);
   
   while (!Serial); // wait for hardware serial to appear <DEBUG>
 
@@ -122,11 +122,11 @@ void setup()
   
   // Remove all data in buffer
   unsigned long startedWaiting = millis();
-  while((GPS.available()) && (millis() - startedWaiting <= 10000))
+  while((GPS.available()) && (millis() - startedWaiting <= 5000))
   {
       GPS.read(); // don't save the data, just dump
 //      Serial.write(GPS.read());    
-      Serial.print(".");
+      Serial.print('.');
   }
   Serial.println(" done");
 
@@ -163,25 +163,22 @@ void setup()
   Serial.println("***************************");
 
 
-
-
   Serial.println("Asking for RMC continuously");
   GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);  // RMC or RMC + GGA
 
 
-
-
-  Serial.println("Waiting here for a GPS fix ...");
   #ifdef WAIT_GPS_FIX
-    while(not(GPS.fix))
-    {
-      delay(100);
-    }
-  #endif
+  Serial.print("Waiting here for a GPS fix ...");
+  while(not(GPS.fix))
+  {
+    delay(100);
+  }
+  Serial.println(" done");
   Serial.println("We have the fix, PPS should be working now");
+  #endif
   Serial.println("Fix: " + String(GPS.fix));
     
-  }
+} // END OF SET UP
 
 
 
@@ -209,7 +206,7 @@ void loop()
   //    }
 
 
-  //  GPS --> PC
+  //  PC <-- GPS
   //-------------  
   if (GPS.available()) 
   {
