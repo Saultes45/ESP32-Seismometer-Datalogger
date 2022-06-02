@@ -132,7 +132,7 @@ void loop()
 
 
 
-	if (goodMessageReceived_flag)
+	if (goodMessageReceived_flag) // Check we have a good message from the RS1D (UART)
 	{
 		goodMessageReceived_flag = false; // Reset the flag
 
@@ -239,8 +239,12 @@ void loop()
 			{
 				// Statistics
 				//-----------
-				nbr_bumpDetectedTotal = nbr_bumpDetectedTotal + nbr_bumpDetectedLast;
+        // 1- number of bumps across all the messages
+				//nbr_bumpDetectedTotal = nbr_bumpDetectedTotal + nbr_bumpDetectedLast;
+        nbr_bumpDetectedTotal += nbr_bumpDetectedLast; // increment the counter of detected bumps
 
+
+        // 2- number of message countaining AT LEAST 1 bump
 				if (nbr_bumpDetectedLast > 0)
 				{
 					nbr_messagesWithBumps++;
