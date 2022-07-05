@@ -29,7 +29,7 @@
 // -------------------------- Conditional defines --------------------------
 
 #define SERIAL_VERBOSE // Comment out to remove message to the console (and save some exec time and power)
-#define USE_GPS        // Comment out to not use any code for the GPS (even the library)
+//#define USE_GPS        // Comment out to not use any code for the GPS (even the library)
 
 /* if you uncomment USE_GPS, you have to actually unconnect its SDA and SCL from the GPS pins.
 *  Otherwise the RTC will not work
