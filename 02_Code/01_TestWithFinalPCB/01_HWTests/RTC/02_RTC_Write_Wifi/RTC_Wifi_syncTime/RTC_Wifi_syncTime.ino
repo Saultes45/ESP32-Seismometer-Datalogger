@@ -1,11 +1,19 @@
 
 
 // Nathan's 4G AP
-const char* ssid       = "SPARK-B618-D19F";
-const char* password   = "91TEND7YA8D";
+//const char* ssid       = "SPARK-B618-D19F";
+//const char* password   = "91TEND7YA8D";
+
+const char* ssid       = "SKINNY-7NPVYC";
+const char* password   = "WackyEmu100K";
 
 
-  
+const uint8_t   LOG_PWR_PIN_1               = 25;  // To turn the adalogger Feather ON and OFF
+const uint8_t   LOG_PWR_PIN_2               = 26;  // To turn the adalogger Feather ON and OFF
+const uint8_t   LOG_PWR_PIN_3               = 12;  // To turn the adalogger Feather ON and OFF
+const uint8_t   LOG_PWR_PIN_4               = 27;  // To turn the adalogger Feather ON and OFF
+
+
 //#include "WifiPass.h"
 //#include <ESP8266WiFi.h>
 #include <WiFi.h>
@@ -38,6 +46,57 @@ int timeUpdated = 0;
 
 void setup() {
   Serial.begin(115200);
+
+  pinMode (LOG_PWR_PIN_1    , OUTPUT);
+  pinMode (LOG_PWR_PIN_2    , OUTPUT);
+  pinMode (LOG_PWR_PIN_3    , OUTPUT);
+  pinMode (LOG_PWR_PIN_4    , OUTPUT);
+  
+
+  digitalWrite(LOG_PWR_PIN_1, HIGH);
+  digitalWrite(LOG_PWR_PIN_2, HIGH);
+  digitalWrite(LOG_PWR_PIN_3, HIGH);
+  digitalWrite(LOG_PWR_PIN_4, HIGH);
+
+  delay(1000);
+
+  Wire.begin();
+  Serial.println("Scanning I2C...");
+  byte error, address;
+  int nDevices;
+  nDevices = 0;
+  for(address = 1; address < 127; address++ ) 
+  {
+    // The i2c_scanner uses the return value of
+    // the Write.endTransmisstion to see if
+    // a device did acknowledge to the address.
+    Wire.beginTransmission(address);
+    error = Wire.endTransmission();
+
+    if (error == 0)
+    {
+      Serial.print("I2C device found at address 0x");
+      if (address<16) 
+        Serial.print("0");
+      Serial.print(address,HEX);
+      Serial.println("  !");
+
+      nDevices++;
+    }
+    else if (error==4) 
+    {
+      Serial.print("Unknown error at address 0x");
+      if (address<16) 
+        Serial.print("0");
+      Serial.println(address,HEX);
+    }    
+  }
+  if (nDevices == 0)
+    Serial.println("No I2C devices found");
+  else
+    Serial.println("I2C scan done");
+
+    
 
    Serial.println("Testing the RTC...");
 
