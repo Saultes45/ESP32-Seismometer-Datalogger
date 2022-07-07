@@ -110,15 +110,15 @@ void setup()
   GPS.begin(0x10);  // The I2C address to use is 0x10
 
 
+  // Turn OFF all GPS output
+  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_OFF);
+
   // Set up communication
   // ---------------------
   GPS.sendCommand(PMTK_SET_BAUD_115200);      // Ask the GPS to send us data at 115200bps
   GPS.sendCommand(PMTK_SET_NMEA_UPDATE_10HZ); // 10 Hz update rate (message only)
   GPS.sendCommand(PMTK_API_SET_FIX_CTL_5HZ);  // Can't fix position faster than 5 times a second
 
-
-  // Turn OFF all GPS output
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_OFF);
   
   // Remove all data in buffer
   unsigned long startedWaiting = millis();
@@ -164,7 +164,7 @@ void setup()
 
 
   Serial.println("Asking for RMC continuously");
-  GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);  // RMC or RMC + GGA
+  //GPS.sendCommand(PMTK_SET_NMEA_OUTPUT_RMCONLY);  // RMC or RMC + GGA
 
 
   #ifdef WAIT_GPS_FIX
